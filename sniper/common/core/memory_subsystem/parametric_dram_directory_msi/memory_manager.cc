@@ -21,6 +21,7 @@
 #include "contention_model.h"
 #include "utopia.h"
 #include "pwc.h"
+#include "pagetable_buffer.h"
 #include "hashtable_baseline.h"
 #include "thread.h"
 
@@ -69,7 +70,13 @@ MemoryManager::MemoryManager(Core* core,
    shadow_cache_miss_latency(NULL,0),
    tlb_caching(false),
    potm_latency(NULL,0),
-   migration_latency(NULL,0)
+   migration_latency(NULL,0),
+   ptb(NULL),
+   m_ptb_enabled(false),
+   ptb_size(0),
+   ptb_assoc(0),
+   ptb_access_latency(NULL,0),
+   ptb_mode(PageTableBuffer::Mode::LEAF_PT)
 
 {
    // Read Parameters from the Config file
@@ -260,7 +267,18 @@ MemoryManager::MemoryManager(Core* core,
 
          pwc  = new PWC("pwc", "perf_model/ptw/pwc", getCore()->getId(),pwc_L4_assoc,pwc_L4_size,pwc_L3_assoc,pwc_L3_size,pwc_L2_assoc,pwc_L2_size, pwc_access_latency, pwc_miss_latency, pwc_perfect);
       }
-      
+
+      m_ptb_enabled = Sim()->getCfg()->getBoolDefault("perf_model/ptb/enabled", false);
+      if(m_ptb_enabled){
+         ptb_size  = Sim()->getCfg()->getInt("perf_model/ptb/size");
+         ptb_assoc = Sim()->getCfg()->getInt("perf_model/ptb/associativity");
+         int ptb_version = Sim()->getCfg()->getInt("perf_model/ptb/version");
+         ptb_mode = (ptb_version == 2) ? PageTableBuffer::Mode::PD : PageTableBuffer::Mode::LEAF_PT;
+
+         ptb_access_latency = ComponentLatency(core->getDvfsDomain(), Sim()->getCfg()->getInt("perf_model/ptb/access_penalty"));
+         ptb = new PageTableBuffer("ptb", getCore()->getId(), ptb_size, ptb_assoc, ptb_access_latency, ptb_mode);
+      }
+
 
       if(radix_enabled){
 
@@ -279,7 +297,8 @@ MemoryManager::MemoryManager(Core* core,
                }
                ptw = new PageTableWalkerRadix(levels_ptw,getCore(),shmem_perf_model,indices_ptw,percentages_ptw, pwc, m_pwc_enabled,shadow_cache); //@kanellok new PTW with pointers
                ptw->setMemoryManager(this);
-            
+               ptw->setPageTableBuffer(ptb);
+
 
       }
       else if (ptw_cuckoo_enabled){
@@ -295,6 +314,7 @@ MemoryManager::MemoryManager(Core* core,
 
             ptw = new PageTableWalkerCuckoo(getCore()->getId(),m_system_page_size,getShmemPerfModel(),pwc,m_pwc_enabled,d, strdup(hash_func.c_str()),size,rehash_threshold,scale,swaps,priority);
             ptw->setMemoryManager(this);
+            ptw->setPageTableBuffer(ptb);
             
 
       }
@@ -316,6 +336,7 @@ MemoryManager::MemoryManager(Core* core,
                std::cout<<"PWC" << m_pwc_enabled << "\n";
                ptw = new PageTableVirtualized(levels_ptw,getCore(),shmem_perf_model,indices_ptw,percentages_ptw, pwc, m_pwc_enabled,shadow_cache); //@kanellok new PTW with pointers
                ptw->setMemoryManager(this);
+               ptw->setPageTableBuffer(ptb);
             
 
       }
@@ -797,6 +818,7 @@ MemoryManager::~MemoryManager()
    if (m_itlb) delete m_itlb;
    if (m_dtlb) delete m_dtlb;
    if (m_stlb) delete m_stlb;
+   if (ptb) delete ptb;
 
    for(i = MemComponent::FIRST_LEVEL_CACHE; i <= (UInt32)m_last_level_cache; ++i)
    {
