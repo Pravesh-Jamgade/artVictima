@@ -818,6 +818,7 @@ MemoryManager::~MemoryManager()
    if (m_itlb) delete m_itlb;
    if (m_dtlb) delete m_dtlb;
    if (m_stlb) delete m_stlb;
+   if (ptw) delete ptw;
    if (ptb) delete ptb;
 
    for(i = MemComponent::FIRST_LEVEL_CACHE; i <= (UInt32)m_last_level_cache; ++i)

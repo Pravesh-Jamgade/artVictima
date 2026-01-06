@@ -4,8 +4,9 @@
 #include "subsecond_time.h"
 #include <math.h> 
 #include <fstream>
+#include <inttypes.h>
 #include <stdlib.h>
-#include <time.h> 
+#include <time.h>
 
 
 namespace ParametricDramDirectoryMSI{
@@ -34,12 +35,20 @@ namespace ParametricDramDirectoryMSI{
             this->starting_table=InitiateTablePtw((int)pow(2.0,(float)level_bit_indices[0]));
         }
         latency_per_level = new SubsecondTime[number_of_levels];
+        for (int i = 0; i < number_of_levels; ++i)
+            latency_per_level[i] = SubsecondTime::Zero();
+        latency_histograms.resize(number_of_levels);
+        hit_where_histograms.resize(number_of_levels);
+        hit_where_latency.resize(number_of_levels);
+        level_accesses.resize(number_of_levels, 0);
+        total_walk_latency = SubsecondTime::Zero();
+        total_ptb_latency = SubsecondTime::Zero();
         String name = "ptw_radix_";
         name = name+std::to_string(counter).c_str();
-        for (int i = 0; i < number_of_levels+1; i++){
+        for (int i = 0; i < number_of_levels; i++){
             String metric_name = "page_level_latency_";
             String metric = metric_name+std::to_string(i).c_str();
-            registerStatsMetric(name, core_id, metric, &latency_per_level[i]);        
+            registerStatsMetric(name, core_id, metric, &latency_per_level[i]);
         }
         
         counter++;
@@ -73,11 +82,14 @@ namespace ParametricDramDirectoryMSI{
                     ptw_table* start_table = reinterpret_cast<ptw_table*>(lookup_result.base_address);
                     SubsecondTime walk_latency = InitializeWalkRecursive(eip, address, start_level, start_table, lock_signal, data_buf, data_length, modeled, count);
                     SubsecondTime final_latency = ptb_latency + walk_latency;
+                    total_ptb_latency += ptb_latency;
+                    total_walk_latency += final_latency;
                     m_shmem_perf_model->setElapsedTime(ShmemPerfModel::_USER_THREAD,now);
                     UInt64 vpn = address >> init_walk_functional(address);
                     track_per_page_ptw_latency(vpn,final_latency);
                     return final_latency;
                 }
+                total_ptb_latency += ptb_latency;
             }
 
             uint64_t a1 = vpn_indices[0];
@@ -97,6 +109,8 @@ namespace ParametricDramDirectoryMSI{
 
             }
 
+            bool level0_recorded = false;
+            bool level_recorded = false;
             if(pwc_hit == true){
 
                     total_latency = pwc->access_latency.getLatency();
@@ -108,7 +122,7 @@ namespace ParametricDramDirectoryMSI{
 
                     IntPtr cache_address = ((IntPtr)(&starting_table->entries[a1])) & (~((64 - 1)));
 
-                    cache->processMemOpFromCore(
+                    HitWhere::where_t hit_where = cache->processMemOpFromCore(
                         eip,
                         lock_signal,
                         Core::mem_op_t::READ,
@@ -131,9 +145,13 @@ namespace ParametricDramDirectoryMSI{
 
                     mem_manager->tagCachesBlockType(cache_address,CacheBlockInfo::block_type_t::PAGE_TABLE);
 
-                    latency_per_level[0] += total_latency;
+                    recordLevelStats(0, total_latency, &hit_where);
+                    level0_recorded = true;
 
             }
+
+            if(!level0_recorded)
+                recordLevelStats(0, total_latency);
 
 
             if(starting_table->entries[a1].entry_type==ptw_table_entry_type::PTW_NONE){
@@ -141,7 +159,6 @@ namespace ParametricDramDirectoryMSI{
             }
             if(starting_table->entries[a1].entry_type==ptw_table_entry_type::PTW_ADDRESS){
                 //std::cout<<std::hex<<address<<" - "<<std::hex<<a1<<" - "<<level<<" Address\n";
-                latency_per_level[0] += total_latency;
                 return total_latency + ptb_latency;
             }
 
@@ -159,6 +176,7 @@ namespace ParametricDramDirectoryMSI{
             m_shmem_perf_model->setElapsedTime(ShmemPerfModel::_USER_THREAD,now);
             UInt64 vpn = address >> init_walk_functional(address);
             track_per_page_ptw_latency(vpn,final_latency);
+            total_walk_latency += final_latency;
 
 
             return final_latency;
@@ -210,8 +228,8 @@ namespace ParametricDramDirectoryMSI{
                     
                     IntPtr cache_address = ((IntPtr)(&new_table->entries[a1])) & (~((64 - 1))); 
 
-                    cache->processMemOpFromCore(
-                        eip, 
+                    HitWhere::where_t hit_where = cache->processMemOpFromCore(
+                        eip,
                         lock_signal,
                         Core::mem_op_t::READ,
                         cache_address, 0,
@@ -229,9 +247,13 @@ namespace ParametricDramDirectoryMSI{
                     addresses.push_back((IntPtr)(&new_table->entries[a1]));
 
                     mem_manager->tagCachesBlockType(cache_address,CacheBlockInfo::block_type_t::PAGE_TABLE);
-                    latency_per_level[level-1] += total_latency;
-                    
+                    recordLevelStats(level-1, total_latency, &hit_where);
+                    level_recorded = true;
+
              }
+
+            if(!level_recorded)
+                recordLevelStats(level-1, total_latency);
 		    
 
 
@@ -380,6 +402,52 @@ namespace ParametricDramDirectoryMSI{
         }
 
         return current_table;
+    }
+
+    void PageTableWalkerRadix::recordLevelStats(int level_index, SubsecondTime latency, HitWhere::where_t *hit_where){
+        if(level_index < 0 || level_index >= stats_radix.number_of_levels)
+            return;
+
+        latency_per_level[level_index] += latency;
+        latency_histograms[level_index].update(latency.getNS());
+        level_accesses[level_index]++;
+
+        if(hit_where){
+            hit_where_histograms[level_index][*hit_where]++;
+            hit_where_latency[level_index][*hit_where] += latency;
+        }
+    }
+
+    PageTableWalkerRadix::~PageTableWalkerRadix(){
+        UInt64 walks = stats.page_walks;
+        SubsecondTime period = core->getDvfsDomain()->getPeriod();
+        double avg_stall_cycles = walks ? static_cast<double>(SubsecondTime::divideRounded(total_walk_latency, period)) / walks : 0.0;
+        double cpi_on_stlb_miss = 1.0 + avg_stall_cycles;
+
+        printf("[Core %d] STLB miss CPI: %.4f (avg stall cycles %.2f over %" PRIu64 " walks)\n", core_id, cpi_on_stlb_miss, avg_stall_cycles, walks);
+
+        double total_ns = static_cast<double>(total_walk_latency.getNS());
+        if(total_ns > 0){
+            double ptb_share = static_cast<double>(total_ptb_latency.getNS()) / total_ns * 100.0;
+            printf("  PTB latency share: %.2f%%\n", ptb_share);
+            for (int lvl = 0; lvl < stats_radix.number_of_levels; ++lvl){
+                double level_ns = static_cast<double>(latency_per_level[lvl].getNS());
+                double level_pct = level_ns / total_ns * 100.0;
+                double avg_ns = level_accesses[lvl] ? level_ns / level_accesses[lvl] : 0.0;
+                printf("  Level %d latency: avg %.2f ns, share %.2f%%, accesses %" PRIu64 "\n", lvl+1, avg_ns, level_pct, level_accesses[lvl]);
+                printf("    Latency histogram: ");
+                latency_histograms[lvl].print();
+                if(!hit_where_histograms[lvl].empty()){
+                    printf("    HitWhere histogram:\n");
+                    for(const auto &entry : hit_where_histograms[lvl]){
+                        UInt64 count = entry.second;
+                        SubsecondTime lat_sum = hit_where_latency[lvl].at(entry.first);
+                        double avg_hw_ns = count ? static_cast<double>(lat_sum.getNS()) / count : 0.0;
+                        printf("      %s: %" PRIu64 " (avg %.2f ns)\n", HitWhereString(entry.first), count, avg_hw_ns);
+                    }
+                }
+            }
+        }
     }
 
 

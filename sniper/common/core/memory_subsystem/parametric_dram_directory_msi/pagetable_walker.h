@@ -102,8 +102,9 @@ namespace ParametricDramDirectoryMSI
 		virtual SubsecondTime init_walk(IntPtr eip, IntPtr address, UtopiaCache* shadow_cache, CacheCntlr *cache, Core::lock_signal_t lock_signal, Byte* _data_buf, UInt32 _data_length, bool modeled, bool count);
 		virtual int init_walk_functional(IntPtr address) = 0;
 		virtual bool isPageFault(IntPtr address) = 0;
-		PageTableWalker(int core_id, int pagesize, ShmemPerfModel* m_shmem_perf_model,PWC* pwc, bool pwc_enabled);
-		void setNucaCache(NucaCache* nuca2){ nuca = nuca2; printf("Attaching Nuca to PTW \n");}
+                PageTableWalker(int core_id, int pagesize, ShmemPerfModel* m_shmem_perf_model,PWC* pwc, bool pwc_enabled);
+                virtual ~PageTableWalker() = default;
+                void setNucaCache(NucaCache* nuca2){ nuca = nuca2; printf("Attaching Nuca to PTW \n");}
 		virtual void setMemoryManager(MemoryManager* _mem_manager){ mem_manager = _mem_manager;}
                 void track_per_page_ptw_latency(int vpn, SubsecondTime current_lat);
                 int allocate_page_size();
