@@ -64,6 +64,16 @@
     </div>
 
     <div class="card">
+        <div class="title">📚 Page Table Capacity</div>
+        <p>Four-level x86-64 paging exposes 512 entries per level (9 bits each). With 4&nbsp;KB pages, a process can theoretically map 2<sup>36</sup> pages (256&nbsp;TiB) inside the 48-bit canonical window; with 2&nbsp;MB pages the PD-level leaf entries top out at 2<sup>27</sup> (still 256&nbsp;TiB of coverage). OS policy and available RAM still bound what gets populated. If 5-level paging is enabled, the architectural span grows to 57 bits (128&nbsp;PiB), but Victima currently models the common 4-level configuration.</p>
+    </div>
+
+    <div class="card">
+        <div class="title">🧭 Leaf PT pointer caching</div>
+        <p>Victima’s walker models the four-level chain (PML4→PDP→PD→PT). Each step uses the current level’s PTE plus the next 9-bit VPN slice to form the address of the following table; the PT entry then holds the data-page PPN. To reduce repeated work, the simulator keys a cached leaf-page-table base on VPN[ PML4 + PDP + PD ]—kept alongside the STLB. On an STLB hit, that cached base is combined with the final 9 VPN bits to index the PT and fetch the PTE directly; on a miss, the same VPN trio is reused to rediscover the PT pointer before issuing the PT memory access.</p>
+    </div>
+
+    <div class="card">
         <div class="title">🌟 Upcoming Features!</div>
         <p>Stay tuned for our revamped simulation framework and more features.</p>
     </div>
@@ -187,7 +197,7 @@ if(!oracle_protection_enabled){
                 We call the lookup function of the TLB subsystem to search for the translation inside the TLBs. 
                 We store the result in hit. If the result is a TLB_MISS, we perform the page table walk.
                 <pre><code class="language-cpp">SubsecondTime ptw_latency=  ptw->init_walk(eip, address, (shadow_cache_enabled ? shadow_cache : NULL), m_cache_cntlrs[MemComponent::L1_DCACHE] , lock_signal, data_buf, data_length, modeled,count);</code></pre> 
-                We call the init_walk function of the PTW subsystem to perform the page table walk. We store the result in ptw_latency. ptw is the pointer to the page table walker. 
+                We call the init_walk function of the PTW subsystem to perform the page table walk. We store the result in ptw_latency. ptw is the pointer to the page table walker.
                 Even though the current version of Sniper supports multiple page table walkers, we suggest you stick to radix-based walker until we release the full version of the simulator.
                 <pre><code class="language-cpp"> if(hit == TLB::where_t::L2_CACHE){
     result.latency = m_tlb_l1_access_penalty.getLatency() + m_tlb_l2_cache_access.getLatency();
@@ -199,7 +209,26 @@ if(!oracle_protection_enabled){
                 If the result of the lookup is TLB::where_t::L2_CACHE, we set the latency of the result to the sum of the latency of the L1 TLB access and the latency of the L2 cache access.
                 This means that Victima stored the translation inside the L2_Cache and we have to access the L2 cache to get the translation. You can further experiment 
                 with the other cases of the lookup result. At the moment, storing the translation inside the L2 cache is the only supported case.
- 
+
+            </div>
+        </div>
+
+
+        <div class="snippet-container">
+
+            <button type="button" class="collapsible">Virtual address coverage and STLB-assisted walks</button>
+            <div class="content">
+                <p>x86-64 uses four 9-bit indices (PML4 → PDP → PD → PT) to cover the 48-bit canonical user space; each intermediate entry points to the next page table page, and the leaf entry supplies the physical page number. With 512 entries per level, a single process can in theory map 512<sup>4</sup> 4&nbsp;KB pages (256&nbsp;TiB of virtual space), though actual mappings are limited by physical memory and OS policy.</p>
+                <p>Victima caches partial walks in the shared TLB (STLB). On an STLB hit, the concatenated VPN bits for PML4/PDP/PD directly identify the cached leaf table pointer. On an STLB miss, the walker reconstructs the same three-level VPN tuple, follows the PTE pointers in memory, and then combines the final 9-bit PT index with the retrieved base to fetch the leaf PTE before completing the translation.</p>
+            </div>
+        </div>
+
+        <div class="snippet-container">
+
+            <button type="button" class="collapsible">Baseline core → TLB → PTW handoff</button>
+            <div class="content">
+                <p>In the baseline flow, <code>Core::initiateMemoryAccess</code> forwards requests to <code>MemoryManager::coreInitiateMemoryAccess</code>, which immediately calls <code>performAddressTranslation</code> unless oracle translation is enabled. The manager dispatches demand-loads and instruction fetches to the per-core TLB via <code>accessTLBSubsystem</code>; <code>TLB::lookup</code> records an L1 TLB hit/miss and optionally an L2 cache-backed translation hit.</p>
+                <p>On a TLB miss (or L2-cache-backed miss), the manager invokes <code>ptw-&gt;init_walk</code>. The walker issues a four-level radix walk, relying on the cache hierarchy for PTE accesses, and returns an accumulated translation latency. That latency—whether from pure TLB access or a full walk—is added to the subsequent cache-controller access when the request continues down the hierarchy.</p>
             </div>
         </div>
 
