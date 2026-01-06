@@ -3,12 +3,14 @@
 
 #include "page_table_walker_types.h"
 #include "pagetable_walker.h"
+#include "pagetable_buffer.h"
 #include "cache_cntlr.h"
 #include "subsecond_time.h"
 #include "fixed_types.h"
 #include "memory_manager.h"
 #include <stdint.h>
 #include "utopia_cache_template.h"
+#include <vector>
 
 
 namespace ParametricDramDirectoryMSI{
@@ -40,6 +42,9 @@ namespace ParametricDramDirectoryMSI{
             bool isPageFault(IntPtr address);
             bool isPageFaultHelper(uint64_t address,int level,ptw_table* new_table);
             std::vector<IntPtr> getAddresses(){return addresses;}
+        private:
+            std::vector<uint64_t> computeVpnIndices(uint64_t address);
+            ptw_table* resolveTableForLevel(const std::vector<uint64_t> &vpn_indices, int target_level);
     };
 
 }

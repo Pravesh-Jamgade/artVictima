@@ -58,45 +58,55 @@ namespace ParametricDramDirectoryMSI{
             cache = _cache;
             stats.page_walks++;
 
-            uint64_t a1;
-            int shift_bits=0;
+            std::vector<uint64_t> vpn_indices = computeVpnIndices(address);
+
             SubsecondTime total_latency;
             SubsecondTime t_start;
             SubsecondTime now = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
 
-
-            for (int i = stats_radix.number_of_levels; i >= 1; i--)
-            {
-                shift_bits+=stats_radix.address_bit_indices[i];
+            SubsecondTime ptb_latency = SubsecondTime::Zero();
+            if(ptb){
+                PageTableBuffer::LookupResult lookup_result = ptb->lookup(vpn_indices, count);
+                ptb_latency = lookup_result.latency;
+                if(lookup_result.hit){
+                    int start_level = (ptb->getMode() == PageTableBuffer::Mode::LEAF_PT) ? stats_radix.number_of_levels : stats_radix.number_of_levels - 1;
+                    ptw_table* start_table = reinterpret_cast<ptw_table*>(lookup_result.base_address);
+                    SubsecondTime walk_latency = InitializeWalkRecursive(eip, address, start_level, start_table, lock_signal, data_buf, data_length, modeled, count);
+                    SubsecondTime final_latency = ptb_latency + walk_latency;
+                    m_shmem_perf_model->setElapsedTime(ShmemPerfModel::_USER_THREAD,now);
+                    UInt64 vpn = address >> init_walk_functional(address);
+                    track_per_page_ptw_latency(vpn,final_latency);
+                    return final_latency;
+                }
             }
-            a1=((address>>shift_bits))&0x1ff;
 
+            uint64_t a1 = vpn_indices[0];
             bool pwc_hit = false;
 
-            if(page_walk_cache_enabled){ //@kanellok access page walk caches 
+            if(page_walk_cache_enabled){ //@kanellok access page walk caches
 
-			    PWC::where_t pwc_where;
+                            PWC::where_t pwc_where;
 
-			    if(page_walk_cache_enabled)
+                            if(page_walk_cache_enabled)
                 {
                     IntPtr pwc_address = (IntPtr)(&starting_table->entries[a1]);
                     pwc_where = pwc->lookup(pwc_address, t_start ,true, 1, count);
-                    if( pwc_where == PWC::HIT ) pwc_hit = true; 
+                    if( pwc_where == PWC::HIT ) pwc_hit = true;
 
                 }
-           
+
             }
 
             if(pwc_hit == true){
 
-                    total_latency = pwc->access_latency.getLatency(); 
+                    total_latency = pwc->access_latency.getLatency();
 
             }
             else{
 
                     t_start = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
-                    
-                    IntPtr cache_address = ((IntPtr)(&starting_table->entries[a1])) & (~((64 - 1))); 
+
+                    IntPtr cache_address = ((IntPtr)(&starting_table->entries[a1])) & (~((64 - 1)));
 
                     cache->processMemOpFromCore(
                         eip,
@@ -106,7 +116,7 @@ namespace ParametricDramDirectoryMSI{
                         data_buf, data_length,
                         modeled,
                         count, CacheBlockInfo::block_type_t::PAGE_TABLE, SubsecondTime::Zero(),shadow_cache);
-                   
+
 
                     addresses.push_back((IntPtr)(&starting_table->entries[a1]));
 
@@ -122,9 +132,9 @@ namespace ParametricDramDirectoryMSI{
                     mem_manager->tagCachesBlockType(cache_address,CacheBlockInfo::block_type_t::PAGE_TABLE);
 
                     latency_per_level[0] += total_latency;
-                    
+
             }
-		
+
 
             if(starting_table->entries[a1].entry_type==ptw_table_entry_type::PTW_NONE){
                 starting_table->entries[a1]=*CreateNewPtwEntryAtLevel(1,stats_radix.number_of_levels,stats_radix.address_bit_indices,stats_radix.hit_percentages,this,address);
@@ -132,12 +142,20 @@ namespace ParametricDramDirectoryMSI{
             if(starting_table->entries[a1].entry_type==ptw_table_entry_type::PTW_ADDRESS){
                 //std::cout<<std::hex<<address<<" - "<<std::hex<<a1<<" - "<<level<<" Address\n";
                 latency_per_level[0] += total_latency;
-                return total_latency;
+                return total_latency + ptb_latency;
             }
 
-            
-            SubsecondTime final_latency = total_latency+InitializeWalkRecursive(eip, address,2,starting_table->entries[a1].next_level_table,lock_signal,data_buf,data_length, modeled, count);
-            
+
+            SubsecondTime final_latency = ptb_latency + total_latency+InitializeWalkRecursive(eip, address,2,starting_table->entries[a1].next_level_table,lock_signal,data_buf,data_length, modeled, count);
+
+            if(ptb){
+                PageTableBuffer::Mode mode = ptb->getMode();
+                int target_level = (mode == PageTableBuffer::Mode::LEAF_PT) ? stats_radix.number_of_levels : stats_radix.number_of_levels - 1;
+                ptw_table* target_table = resolveTableForLevel(vpn_indices, target_level);
+                if(target_table)
+                    ptb->insert(vpn_indices, reinterpret_cast<IntPtr>(target_table));
+            }
+
             m_shmem_perf_model->setElapsedTime(ShmemPerfModel::_USER_THREAD,now);
             UInt64 vpn = address >> init_walk_functional(address);
             track_per_page_ptw_latency(vpn,final_latency);
@@ -325,6 +343,43 @@ namespace ParametricDramDirectoryMSI{
         }
         return isPageFaultHelper(address,level+1,new_table->entries[a1].next_level_table);
 
+    }
+
+    std::vector<uint64_t> PageTableWalkerRadix::computeVpnIndices(uint64_t address){
+        std::vector<uint64_t> indices;
+        indices.reserve(stats_radix.number_of_levels);
+
+        for (int level = 1; level <= stats_radix.number_of_levels; level++)
+        {
+            int shift_bits = 0;
+            for (int i = stats_radix.number_of_levels; i >= level; i--)
+            {
+                shift_bits += stats_radix.address_bit_indices[i];
+            }
+            indices.push_back((address >> shift_bits) & 0x1ff);
+        }
+
+        return indices;
+    }
+
+    ptw_table* PageTableWalkerRadix::resolveTableForLevel(const std::vector<uint64_t> &vpn_indices, int target_level){
+        if(target_level <= 1 || target_level > stats_radix.number_of_levels)
+            return NULL;
+
+        ptw_table* current_table = starting_table;
+
+        for (int level = 1; level < target_level; level++)
+        {
+            uint64_t index = vpn_indices[level-1];
+            if(current_table->entries[index].entry_type != ptw_table_entry_type::PTW_TABLE_POINTER ||
+               current_table->entries[index].next_level_table == NULL)
+            {
+                return NULL;
+            }
+            current_table = current_table->entries[index].next_level_table;
+        }
+
+        return current_table;
     }
 
 

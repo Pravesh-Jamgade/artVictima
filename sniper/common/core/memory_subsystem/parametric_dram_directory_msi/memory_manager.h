@@ -14,6 +14,7 @@
 #include "shared_cache_block_info.h"
 #include "subsecond_time.h"
 #include "pagetable_walker.h"
+#include "pagetable_buffer.h"
 #include "pagetable_walker_radix.h"
 #include "tlb.h"
 #include "rangelb.h"
@@ -169,6 +170,12 @@ namespace ParametricDramDirectoryMSI
          UInt32 pwc_L4_assoc,pwc_L4_size;
          UInt32 pwc_L3_assoc,pwc_L3_size;
          UInt32 pwc_L2_assoc,pwc_L2_size;
+         PageTableBuffer *ptb;
+         bool m_ptb_enabled;
+         UInt32 ptb_size;
+         UInt32 ptb_assoc;
+         ComponentLatency ptb_access_latency;
+         PageTableBuffer::Mode ptb_mode;
          bool tlb_caching;
          ComponentLatency pwc_access_latency;
          ComponentLatency pwc_miss_latency;
