@@ -292,7 +292,7 @@
 ./datafiles/xsaves/cpuid.xed.txt
 ./datafiles/xsaves/xsaves-isa.txt
 ./datafiles/xsaves/xsaves-isa.txt
-/home/kanellok/mnt/mega-pages/sniper/xed/datafiles/knc/lrb2-regs.txt
-/home/kanellok/mnt/mega-pages/sniper/xed/datafiles/knc/uisa-spine.txt
-/home/kanellok/mnt/mega-pages/sniper/xed/datafiles/knc/uisa-splitter.txt
-/home/kanellok/mnt/mega-pages/sniper/xed/datafiles/knc/uisa-state-bits.txt
+/app/sniper/xed/datafiles/knc/lrb2-regs.txt
+/app/sniper/xed/datafiles/knc/uisa-spine.txt
+/app/sniper/xed/datafiles/knc/uisa-splitter.txt
+/app/sniper/xed/datafiles/knc/uisa-state-bits.txt

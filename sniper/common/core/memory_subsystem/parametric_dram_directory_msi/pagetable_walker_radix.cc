@@ -220,7 +220,7 @@ namespace ParametricDramDirectoryMSI{
             if(pwc_hit == true){
 
                     total_latency = pwc->access_latency.getLatency(); 
-
+                    recordLevelStats(level-1, total_latency);
             }
             else{
                     
@@ -248,14 +248,8 @@ namespace ParametricDramDirectoryMSI{
 
                     mem_manager->tagCachesBlockType(cache_address,CacheBlockInfo::block_type_t::PAGE_TABLE);
                     recordLevelStats(level-1, total_latency, &hit_where);
-                    level_recorded = true;
 
-             }
-
-            if(!level_recorded)
-                recordLevelStats(level-1, total_latency);
-		    
-
+            }
 
             if(new_table->entries[a1].entry_type==ptw_table_entry_type::PTW_NONE){
                 new_table->entries[a1]=*CreateNewPtwEntryAtLevel(level,stats_radix.number_of_levels,stats_radix.address_bit_indices,stats_radix.hit_percentages,this, address);
@@ -264,8 +258,6 @@ namespace ParametricDramDirectoryMSI{
                 //std::cout<<std::hex<<address<<" - "<<std::hex<<a1<<" - "<<level<<" Address\n";
                 return total_latency;
             }
-            
-            
             
             return total_latency+InitializeWalkRecursive(eip,address,level+1,new_table->entries[a1].next_level_table,lock_signal,data_buf,data_length,modeled,count);
         

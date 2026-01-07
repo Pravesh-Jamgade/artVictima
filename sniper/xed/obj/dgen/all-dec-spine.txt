@@ -1,6 +1,6 @@
 
 
-###FILE: /home/kanellok/mnt/mega-pages/sniper/xed/datafiles/knc/uisa-spine.txt
+###FILE: /app/sniper/xed/datafiles/knc/uisa-spine.txt
 
 #BEGIN_LEGAL
 #

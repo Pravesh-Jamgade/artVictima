@@ -10,10 +10,11 @@
 #include "nuca_cache.h"
 #include "utopia_cache_template.h"
 
-class PageTableBuffer;
+
 
 namespace ParametricDramDirectoryMSI
 {
+   class PageTableBuffer;
    class MemoryManager;
    class PageTableWalker{
    
