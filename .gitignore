@@ -14,8 +14,6 @@ __pycache__/
 build/
 dist/
 *.o
-*.a
-*.so
 *.d
 *.out
 
@@ -30,3 +28,5 @@ venv/
 # Simulation outputs
 results/
 traces/
+
+python_kit/
