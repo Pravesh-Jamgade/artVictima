@@ -50,7 +50,7 @@ namespace ParametricDramDirectoryMSI
          ptw_radix_guest->setMemoryManager(_memory_manager);
          ptw_radix_host->setMemoryManager(_memory_manager);
       }
-      void setPageTableBuffer(PageTableBuffer* buffer) override {
+      void setPageTableBuffer(PageTableBuffer* buffer) {
          PageTableWalker::setPageTableBuffer(buffer);
          ptw_radix_guest->setPageTableBuffer(buffer);
          ptw_radix_host->setPageTableBuffer(buffer);

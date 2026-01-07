@@ -392,7 +392,7 @@ YMM15 ymm 256   YMM15 15
 
 
 
-###FILE: /home/kanellok/mnt/mega-pages/sniper/xed/datafiles/knc/lrb2-regs.txt
+###FILE: /app/sniper/xed/datafiles/knc/lrb2-regs.txt
 
 #BEGIN_LEGAL
 #

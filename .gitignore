@@ -1,0 +1,32 @@
+# Editor/OS files
+*~
+*.swp
+*.swo
+*.orig
+.DS_Store
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Build artifacts
+build/
+dist/
+*.o
+*.a
+*.so
+*.d
+*.out
+
+# Logs and temp files
+*.log
+*.tmp
+
+# Virtual environments
+.venv/
+venv/
+
+# Simulation outputs
+results/
+traces/

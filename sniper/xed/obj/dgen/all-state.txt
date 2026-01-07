@@ -233,7 +233,7 @@ EMX_BROADCAST_1TO32_8   BCAST=18  #     256
 
 
 
-###FILE: /home/kanellok/mnt/mega-pages/sniper/xed/datafiles/knc/uisa-state-bits.txt
+###FILE: /app/sniper/xed/datafiles/knc/uisa-state-bits.txt
 
 #BEGIN_LEGAL
 #
