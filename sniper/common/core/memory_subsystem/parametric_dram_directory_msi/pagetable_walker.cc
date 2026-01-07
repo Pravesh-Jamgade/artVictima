@@ -27,10 +27,11 @@ namespace ParametricDramDirectoryMSI
 		name = name+std::to_string(counter).c_str();
 
 		m_shmem_perf_model = _m_shmem_perf_model;
-		page_walk_cache_enabled = _page_walk_cache_enabled;
-		core_id = _core_id;
-		stats.number_of_2MB_pages=0;
-		if( page_walk_cache_enabled){
+                page_walk_cache_enabled = _page_walk_cache_enabled;
+                core_id = _core_id;
+                stats.number_of_2MB_pages=0;
+                ptb = NULL;
+                if( page_walk_cache_enabled){
 
 			pwc = _pwc; // Instantiate page walk caches
 
