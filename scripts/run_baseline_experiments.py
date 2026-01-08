@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
+
 """Generate commands to run baseline or PTB experiments for all workloads."""
 
 import argparse
 import os
 from pathlib import Path
 from typing import Iterable, List, Tuple
+
 
 TRACES = [
     ("bc", "bc.sift"),
@@ -24,23 +26,41 @@ DEFAULT_IMAGE = "docker.io/kanell21/artifact_evaluation:victima"
 SNIPER_COMMAND = "/app/sniper/run-sniper -s stop-by-icount:500000000 --genstats --power"
 
 EXPERIMENT_CONFIGS = {
-    "baseline": {
-        "config": "/app/sniper/config/virtual_memory_configs_multicore/radix.cfg",
+     "baseline": {
+        "config": "/app/sniper/config/virtual_memory_configs/radix.cfg",
         "label": "baseline",
     },
     "baseline-virtualized": {
-        "config": "/app/sniper/config/virtual_memory_configs_multicore/radix_virtual.cfg",
+        "config": "/app/sniper/config/virtual_memory_configs/radix_virtual.cfg",
         "label": "baseline_virtual",
     },
     "ptb": {
-        "config": "/app/sniper/config/virtual_memory_configs_multicore/ptb.cfg",
+        "config": "/app/sniper/config/virtual_memory_configs/ptb.cfg",
         "label": "ptb",
     },
     "ptb-virtualized": {
-        "config": "/app/sniper/config/virtual_memory_configs_multicore/ptb_virtual.cfg",
+        "config": "/app/sniper/config/virtual_memory_configs/ptb_virtual.cfg",
         "label": "ptb_virtual",
     },
 }
+
+# "baseline": {
+#         "config": "/app/sniper/config/virtual_memory_configs_multicore/radix.cfg",
+#         "label": "baseline",
+#     },
+#     "baseline-virtualized": {
+#         "config": "/app/sniper/config/virtual_memory_configs_multicore/radix_virtual.cfg",
+#         "label": "baseline_virtual",
+#     },
+#     "ptb": {
+#         "config": "/app/sniper/config/virtual_memory_configs_multicore/ptb.cfg",
+#         "label": "ptb",
+#     },
+#     "ptb-virtualized": {
+#         "config": "/app/sniper/config/virtual_memory_configs_multicore/ptb_virtual.cfg",
+#         "label": "ptb_virtual",
+#     },
+
 
 
 def build_parser():
@@ -59,15 +79,7 @@ def build_parser():
     )
     parser.add_argument(
         "--experiment",
-        choices=[
-            "all",
-            "baseline",
-            "baseline-virtualized",
-            "ptb",
-            "ptb-virtualized",
-            "custom",
-        ],
-        default="all",
+        type=csv_choices,
         help=(
             "Which experiment set to emit. 'all' writes baseline and PTB runs "
             "with and without virtualized PTW; 'custom' uses --config."
@@ -123,7 +135,38 @@ def build_parser():
         default=20,
         help="Number of native jobs to launch before waiting for completion.",
     )
+
+    parser.add_argument(
+        "--traces-mount",
+        help="Traces from host location $(--trace-mount) to be mounted at $(--trace-dir)",
+    )
     return parser
+
+
+def csv_choices(value_string):
+    """
+    Returns a function that validates comma-separated inputs against a list of choices.
+    """
+    choices = [
+        "all",
+        "baseline",
+        "baseline-virtualized",
+        "ptb",
+        "ptb-virtualized",
+        "custom",
+    ]
+    values = [v.strip() for v in value_string.split(",")]
+    for v in values:
+        if v not in choices:
+            # This integrates with argparse's error handling
+            raise argparse.ArgumentTypeError(
+                f"Invalid choice: '{v}' (choose from {', '.join(choices)})"
+            )
+    return value_string  # Returns a list of valid choices
+
+
+def parse_string_experiments(value) -> List[str]:
+    return [v.strip() for v in value.split(",")]
 
 
 def resolve_experiments(args: argparse.Namespace) -> List[Tuple[str, str]]:
@@ -139,14 +182,14 @@ def resolve_experiments(args: argparse.Namespace) -> List[Tuple[str, str]]:
         return [(label, args.config)]
 
     if args.experiment == "all":
-        keys: Iterable[str] = (
+        keys: Iterable[str] = [
             "baseline",
             "baseline-virtualized",
             "ptb",
             "ptb-virtualized",
-        )
+        ]
     else:
-        keys = (args.experiment,)
+        keys = parse_string_experiments(args.experiment)
 
     resolved = []
     for key in keys:
@@ -157,8 +200,12 @@ def resolve_experiments(args: argparse.Namespace) -> List[Tuple[str, str]]:
     return resolved
 
 
+def q(value):
+    return f'\"{value}\"'
+
+
 def build_commands(args: argparse.Namespace) -> List[Tuple[str, str]]:
-    docker_prefix = f"docker run --rm -v {args.mount_path}:/app {args.docker_image}"
+    docker_prefix = f"docker run --rm -v {q(args.mount_path)}:/app --mount type=bind,src={q(args.traces_mount)},target={args.traces_dir} {q(args.docker_image)} "
 
     commands: List[Tuple[str, str]] = []
     for experiment_label, config_path in resolve_experiments(args):
@@ -191,9 +238,9 @@ def build_commands(args: argparse.Namespace) -> List[Tuple[str, str]]:
 
                 command = (
                     " ".join(slurm_directives)
-                    + " docker_wrapper.sh \""
+                    + ' docker_wrapper.sh "'
                     + base_command
-                    + "\""
+                    + '"'
                 )
             else:
                 command = f"{base_command} > {output_dir}.out 2> {output_dir}.err"
