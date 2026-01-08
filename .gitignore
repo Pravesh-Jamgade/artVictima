@@ -1,3 +1,39 @@
+// # Editor/OS files
+// *~
+// *.swp
+// *.swo
+// *.orig
+// .DS_Store
+
+// # Python artifacts
+// __pycache__/
+// *.py[cod]
+// *.pyo
+
+// # Build artifacts
+// build/
+// dist/
+// *.o
+// *.d
+// *.out
+
+// # Logs and temp files
+// *.log
+// *.tmp
+
+// # Virtual environments
+// .venv/
+// venv/
+
+// # Simulation outputs
+// results/
+// traces/
+
+// # Job files
+// *jobfile*.sh
+// python_kit/
+
+
 # Editor/OS files
 *~
 *.swp
@@ -29,6 +65,22 @@ venv/
 results/
 traces/
 
+python_kit/*
+# Directories containing build artifacts or external tools
+sniper/decoder_lib/
+sniper/frontend/
+sniper/include/
+sniper/lib/
+sniper/mbuild/
+sniper/mcpat/
+sniper/python_kit/
+sniper/sift/
+sniper/xed_kit
+*jobfile.sh
+# Job files
+*jobfile*.sh
+python_kit/
+sniper/**/*.so
 # Job files
 *jobfile*.sh
 python_kit/
