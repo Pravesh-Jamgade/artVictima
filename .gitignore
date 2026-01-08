@@ -84,3 +84,7 @@ sniper/**/*.so
 # Job files
 *jobfile*.sh
 python_kit/
+# Ignore specific configuration files
+sniper/config/buildconf.makefile
+sniper/config/buildconf.sh
+sniper/config/sniper.py
