@@ -32,8 +32,8 @@ namespace ParametricDramDirectoryMSI
 
   ParametricDramDirectoryMSI::MemoryManager *TLB::m_manager = NULL;
 
-  static String sanitizeMetricName(const std::string &value){
-    String result = value;
+  static std::string sanitizeMetricName(const std::string &value){
+    std::string result = value;
     for (size_t idx = 0; idx < result.size(); ++idx){
       if(!std::isalnum(result[idx]))
         result[idx] = '_';
@@ -162,8 +162,8 @@ namespace ParametricDramDirectoryMSI
         auto inserted = dtlb_traversal_path_counts.insert(std::make_pair(path, 0));
         it = inserted.first;
         dtlb_traversal_paths_unique_count++;
-        String metric_name = "dtlb_traversal_path_" + sanitizeMetricName(path) + "_proposed";
-        registerStatsMetric(name, core_id, metric_name, &it->second);
+        String metric_name(("dtlb_traversal_path_" + sanitizeMetricName(path) + "_proposed").c_str());
+        registerStatsMetric(m_cache.getName(), m_core_id, metric_name, &it->second);
       }
       it->second++;
     };
