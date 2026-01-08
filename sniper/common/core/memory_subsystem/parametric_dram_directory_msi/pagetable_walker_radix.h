@@ -14,6 +14,9 @@
 #include "stats.h"
 #include <vector>
 #include <unordered_map>
+#include <array>
+#include <map>
+#include <string>
 
 
 namespace ParametricDramDirectoryMSI{
@@ -42,10 +45,19 @@ namespace ParametricDramDirectoryMSI{
             std::vector<std::unordered_map<HitWhere::where_t, UInt64>> hit_where_histograms;
             std::vector<std::unordered_map<HitWhere::where_t, SubsecondTime>> hit_where_latency;
             std::vector<UInt64> level_accesses;
+            std::vector<UInt64> psc_hits_per_level;
+            std::vector<UInt64> psc_misses_per_level;
+            std::vector<StatHist> psc_miss_latency_histograms;
+            std::vector<std::array<UInt64, HitWhere::NUM_HITWHERES>> psc_miss_hit_where_counts;
+            StatHist stlb_miss_latency_histogram;
+            UInt64 psc_accesses;
+            UInt64 psc_misses;
+            std::map<std::string, UInt64> traversal_path_counts;
+            UInt64 traversal_paths_unique_count;
             SubsecondTime total_walk_latency;
             SubsecondTime total_ptb_latency;
             SubsecondTime init_walk(IntPtr eip, IntPtr address, UtopiaCache* shadow_cache, CacheCntlr *_cache,Core::lock_signal_t lock_signal,Byte* data_buf, UInt32 data_length,bool modeled, bool count) ;
-            SubsecondTime InitializeWalkRecursive(IntPtr eip, IntPtr address,int level,ptw_table* new_table,Core::lock_signal_t lock_signal,Byte* data_buf, UInt32 data_length,bool modeled, bool count);
+            SubsecondTime InitializeWalkRecursive(IntPtr eip, IntPtr address,int level,ptw_table* new_table,Core::lock_signal_t lock_signal,Byte* data_buf, UInt32 data_length,bool modeled, bool count, std::string &traversal_path);
             int init_walk_functional(IntPtr address);
             int init_walk_recursive_functional(IntPtr address,int level,ptw_table* new_table);
             bool isPageFault(IntPtr address);
