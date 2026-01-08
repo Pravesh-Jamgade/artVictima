@@ -29,4 +29,6 @@ venv/
 results/
 traces/
 
+# Job files
+*jobfile*.sh
 python_kit/
