@@ -5,6 +5,7 @@
 #include "cache.h"
 #include <util.h>
 #include <unordered_map>
+#include <map>
 #include "pagetable_walker.h"
 #include "lock.h"
 #include "utopia.h"
@@ -41,6 +42,8 @@ namespace ParametricDramDirectoryMSI
     UInt64 m_access, m_miss, m_eviction;
     UInt64 l1_tlb_cache_hit, l2_tlb_cache_hit, nuca_tlb_cache_hit, victima_alloc_on_eviction, victima_alloc_on_ptw;
     SubsecondTime total_potm_latency;
+    std::map<std::string, UInt64> dtlb_traversal_path_counts;
+    UInt64 dtlb_traversal_paths_unique_count;
 
     ShmemPerfModel* m_shmem_perf_model;
     bool m_translation_enabled;
@@ -131,6 +134,7 @@ namespace ParametricDramDirectoryMSI
 
     
     TLB(String name, String cfgname, core_id_t core_id, ShmemPerfModel* m_shmem_perf_model, UInt32 num_entries,UInt32 pagesize, UInt32 associativity, TLB *next_level, bool _utopia_enableds,bool track_misses, bool track_accesses, int* page_size_list, int page_sizes, PageTableWalker* ptw);
+    ~TLB();
     TLB::where_t lookup(IntPtr address, SubsecondTime now, bool allocate_on_miss, int level , bool model_count, Core::lock_signal_t lock);
     void allocate(IntPtr address, SubsecondTime now,int level, Core::lock_signal_t locksss);
     void setMemManager(ParametricDramDirectoryMSI::MemoryManager* _m_manager){ TLB::m_manager = _m_manager;}
