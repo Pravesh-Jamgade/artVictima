@@ -20,7 +20,7 @@
 #    define XED_ENCODER
 #  endif
 #  if !defined(XED_GIT_VERSION)
-#    define XED_GIT_VERSION "v10.0-298-g2be2d28"
+#    define XED_GIT_VERSION "7.54.0-44-g6aebf27"
 #  endif
 #  if !defined(XED_MPX)
 #    define XED_MPX

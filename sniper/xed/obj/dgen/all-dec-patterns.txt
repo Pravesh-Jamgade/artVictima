@@ -2506,7 +2506,7 @@ VL512  | NELEM=4
 
 
 
-###FILE: /home/kanellok/mnt/mega-pages/sniper/xed/datafiles/knc/uisa-splitter.txt
+###FILE: /app/sniper/xed/datafiles/knc/uisa-splitter.txt
 
 #BEGIN_LEGAL
 #

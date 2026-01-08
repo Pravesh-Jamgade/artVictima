@@ -14,8 +14,6 @@ __pycache__/
 build/
 dist/
 *.o
-*.a
-*.so
 *.d
 *.out
 
@@ -33,3 +31,4 @@ traces/
 
 # Job files
 *jobfile*.sh
+python_kit/
