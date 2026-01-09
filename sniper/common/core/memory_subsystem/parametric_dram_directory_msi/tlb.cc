@@ -31,6 +31,15 @@ namespace ParametricDramDirectoryMSI
 
   ParametricDramDirectoryMSI::MemoryManager *TLB::m_manager = NULL;
 
+  static std::string sanitizeMetricName(const std::string &value){
+    std::string result = value;
+    for (size_t idx = 0; idx < result.size(); ++idx){
+      if(!std::isalnum(result[idx]))
+        result[idx] = '_';
+    }
+    return result;
+  }
+
   
 
   TLB::TLB(String name, String cfgname, core_id_t core_id, ShmemPerfModel* _m_shmem_perf_model, UInt32 num_entries,UInt32 pagesize, UInt32 associativity, TLB *next_level, bool _utopia_enabled, bool _track_misses, bool _track_accesses, int* page_size_list, int page_sizes, PageTableWalker*  _ptw)
@@ -65,6 +74,7 @@ namespace ParametricDramDirectoryMSI
     registerStatsMetric(name, core_id, "access", &m_access);
     registerStatsMetric(name, core_id, "eviction", &m_eviction);
     registerStatsMetric(name, core_id, "miss", &m_miss);
+    registerStatsMetric(name, core_id, "dtlb_traversal_paths_unique_proposed", &dtlb_traversal_paths_unique_count);
 
     is_dtlb = (name == "dtlb");
     is_nested = (name == "nested_tlb");

@@ -105,7 +105,23 @@ namespace ParametricDramDirectoryMSI{
             String metric_name = "page_level_latency_";
             String metric = metric_name+std::to_string(i).c_str();
             registerStatsMetric(name, core_id, metric, &latency_per_level[i]);
+            String psc_hits_metric = String(("psc_hits_level_" + std::to_string(i + 1) + "_proposed").c_str());
+            registerStatsMetric(name, core_id, psc_hits_metric, &psc_hits_per_level[i]);
+            String psc_misses_metric = String(("psc_misses_level_" + std::to_string(i + 1) + "_proposed").c_str());
+            registerStatsMetric(name, core_id, psc_misses_metric, &psc_misses_per_level[i]);
+            String psc_latency_metric = String(("psc_miss_latency_histogram_level_" + std::to_string(i + 1) + "_proposed").c_str());
+            registerStatsMetric(name, core_id, psc_latency_metric, &psc_miss_latency_histograms[i]);
+            for (int where = 0; where < HitWhere::NUM_HITWHERES; ++where){
+                HitWhere::where_t where_type = static_cast<HitWhere::where_t>(where);
+                String where_name = String(sanitizeMetricName(HitWhereString(where_type)).c_str());
+                String psc_hitwhere_metric = String(("psc_miss_hitwhere_" + std::string(where_name.c_str()) + "_level_" + std::to_string(i + 1) + "_proposed").c_str());
+                registerStatsMetric(name, core_id, psc_hitwhere_metric, &psc_miss_hit_where_counts[i][where]);
+            }
         }
+        registerStatsMetric(name, core_id, "psc_accesses_proposed", &psc_accesses);
+        registerStatsMetric(name, core_id, "psc_misses_total_proposed", &psc_misses);
+        registerStatsMetric(name, core_id, "ptw_traversal_paths_unique_proposed", &traversal_paths_unique_count);
+        registerStatsMetric(name, core_id, "tlb_miss_service_latency_histogram_proposed", &stlb_miss_latency_histogram);
         
         counter++;
 
