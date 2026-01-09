@@ -15,6 +15,8 @@
 #include "address_home_lookup.h"
 #include "fault_injection.h"
 #include "memory_manager.h"
+#include <inttypes.h>
+#include <string>
 
 //#define DEBUG_TLB
 //#define TLB_STATS
@@ -53,6 +55,7 @@ namespace ParametricDramDirectoryMSI
     , total_potm_latency(SubsecondTime::Zero())
     , nuca_tlb_cache_hit(0)
     , m_tlb_address_saved_cnt(0)
+    , dtlb_traversal_paths_unique_count(0)
     , utopia_enabled(_utopia_enabled)
     , track_L2TLBmiss(_track_misses)
     , track_Accesses(_track_accesses)
@@ -140,6 +143,18 @@ namespace ParametricDramDirectoryMSI
 
 
 // @kanellok UTOPIA related code segment
+    auto record_dtlb_path = [&](const std::string &path) {
+      if(!(is_dtlb && model_count))
+        return;
+      auto it = dtlb_traversal_path_counts.find(path);
+      if(it == dtlb_traversal_path_counts.end()){
+        auto inserted = dtlb_traversal_path_counts.insert(std::make_pair(path, 0));
+        it = inserted.first;
+        dtlb_traversal_paths_unique_count++;
+      }
+      it->second++;
+    };
+
     if(utopia_enabled && is_dtlb)
     {
 
@@ -148,7 +163,10 @@ namespace ParametricDramDirectoryMSI
         if (m_utr_4KB->inUTR(address,model_count,now,m_core_id)) skip = true; //@kanellok check if data is in UTR and just skip the TLB access in such case
         if (m_utr_2MB->inUTR(address,model_count,now,m_core_id)) skip = true; //@kanellok check if data is in UTR and just skip the TLB access in such case
 
-        if(skip) return where_t::UTR_HIT;
+        if(skip){
+          record_dtlb_path("DTLB->UTR");
+          return where_t::UTR_HIT;
+        }
         
     }
 
@@ -164,6 +182,7 @@ namespace ParametricDramDirectoryMSI
     #endif
 
     if (hit){
+       record_dtlb_path("DTLB");
        if      (is_dtlb || is_nested || is_itlb) return where_t::L1;
        else if (is_stlb) return where_t::L2;
        else if (is_potm) return where_t::POTM;
@@ -182,6 +201,12 @@ namespace ParametricDramDirectoryMSI
         where_next = m_next_level->lookup(address, now, false , 2 /* no allocation */,model_count, lock_signal); 
         if( where_next != TLB::MISS)
           l2tlb_miss = false;
+    }
+    if(is_dtlb && model_count && m_next_level){
+      if(l2tlb_miss)
+        record_dtlb_path("DTLB->STLB->MISS");
+      else
+        record_dtlb_path("DTLB->STLB->HIT");
     }
     else if(victima_enabled){ // We are at L2 TLB 
       
@@ -405,10 +430,7 @@ namespace ParametricDramDirectoryMSI
 
                   where_next = TLB::L1;
             }
-        
-        
         }
-
     }
 
     if (allocate_on_miss && !allocated_in_utopia ) //@kanellok allocate in L1TLB
@@ -594,7 +616,19 @@ namespace ParametricDramDirectoryMSI
 
   }
 
-
+  TLB::~TLB()
+  {
+    if(is_dtlb && !dtlb_traversal_path_counts.empty()){
+      String output_path = Sim()->getConfig()->formatOutputFileName("proposed.stats");
+      FILE *fp = fopen(output_path.c_str(), "a");
+      if(fp){
+        fprintf(fp, "[Core %d] proposed DTLB traversal paths (%" PRIu64 "):\n", m_core_id, dtlb_traversal_paths_unique_count);
+        for(const auto &entry : dtlb_traversal_path_counts){
+          fprintf(fp, "  %s: %" PRIu64 "\n", entry.first.c_str(), entry.second);
+        }
+        fclose(fp);
+      }
+    }
+  }
 
 }
-

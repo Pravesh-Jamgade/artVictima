@@ -14,9 +14,23 @@
 #include "stats.h"
 #include <vector>
 #include <unordered_map>
+#include <array>
+#include <string>
+#include <map>
 
 
 namespace ParametricDramDirectoryMSI{
+
+    struct ProposedHistogram{
+        static const int kBuckets = 20;
+        std::array<UInt64, kBuckets> buckets;
+        UInt64 total;
+        UInt64 min;
+        UInt64 max;
+        ProposedHistogram() : total(0), min(0), max(0) { buckets.fill(0); }
+        void update(UInt64 value);
+        void print(FILE *fp, const char *label, int width = 40) const;
+    };
 
     class PageTableWalkerRadix: public PageTableWalker{
 
@@ -42,10 +56,19 @@ namespace ParametricDramDirectoryMSI{
             std::vector<std::unordered_map<HitWhere::where_t, UInt64>> hit_where_histograms;
             std::vector<std::unordered_map<HitWhere::where_t, SubsecondTime>> hit_where_latency;
             std::vector<UInt64> level_accesses;
+            std::vector<UInt64> psc_hits_per_level;
+            std::vector<UInt64> psc_misses_per_level;
+            std::vector<ProposedHistogram> psc_miss_latency_histograms;
+            std::vector<std::array<UInt64, HitWhere::NUM_HITWHERES>> psc_miss_hit_where_counts;
+            ProposedHistogram stlb_miss_latency_histogram;
+            UInt64 psc_accesses;
+            UInt64 psc_misses;
+            std::map<std::string, UInt64> traversal_path_counts;
+            UInt64 traversal_paths_unique_count;
             SubsecondTime total_walk_latency;
             SubsecondTime total_ptb_latency;
             SubsecondTime init_walk(IntPtr eip, IntPtr address, UtopiaCache* shadow_cache, CacheCntlr *_cache,Core::lock_signal_t lock_signal,Byte* data_buf, UInt32 data_length,bool modeled, bool count) ;
-            SubsecondTime InitializeWalkRecursive(IntPtr eip, IntPtr address,int level,ptw_table* new_table,Core::lock_signal_t lock_signal,Byte* data_buf, UInt32 data_length,bool modeled, bool count);
+            SubsecondTime InitializeWalkRecursive(IntPtr eip, IntPtr address,int level,ptw_table* new_table,Core::lock_signal_t lock_signal,Byte* data_buf, UInt32 data_length,bool modeled, bool count, std::string &traversal_path);
             int init_walk_functional(IntPtr address);
             int init_walk_recursive_functional(IntPtr address,int level,ptw_table* new_table);
             bool isPageFault(IntPtr address);
