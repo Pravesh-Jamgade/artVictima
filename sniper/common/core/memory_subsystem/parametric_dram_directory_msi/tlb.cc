@@ -17,7 +17,6 @@
 #include "memory_manager.h"
 #include <inttypes.h>
 #include <string>
-#include <cctype>
 
 //#define DEBUG_TLB
 //#define TLB_STATS
@@ -162,8 +161,6 @@ namespace ParametricDramDirectoryMSI
         auto inserted = dtlb_traversal_path_counts.insert(std::make_pair(path, 0));
         it = inserted.first;
         dtlb_traversal_paths_unique_count++;
-        String metric_name(("dtlb_traversal_path_" + sanitizeMetricName(path) + "_proposed").c_str());
-        registerStatsMetric(m_cache.getName(), m_core_id, metric_name, &it->second);
       }
       it->second++;
     };
@@ -632,9 +629,14 @@ namespace ParametricDramDirectoryMSI
   TLB::~TLB()
   {
     if(is_dtlb && !dtlb_traversal_path_counts.empty()){
-      printf("[Core %d] proposed DTLB traversal paths (%" PRIu64 "):\n", m_core_id, dtlb_traversal_paths_unique_count);
-      for(const auto &entry : dtlb_traversal_path_counts){
-        printf("  %s: %" PRIu64 "\n", entry.first.c_str(), entry.second);
+      String output_path = Sim()->getConfig()->formatOutputFileName("proposed.stats");
+      FILE *fp = fopen(output_path.c_str(), "a");
+      if(fp){
+        fprintf(fp, "[Core %d] proposed DTLB traversal paths (%" PRIu64 "):\n", m_core_id, dtlb_traversal_paths_unique_count);
+        for(const auto &entry : dtlb_traversal_path_counts){
+          fprintf(fp, "  %s: %" PRIu64 "\n", entry.first.c_str(), entry.second);
+        }
+        fclose(fp);
       }
     }
   }
