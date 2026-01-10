@@ -112,12 +112,12 @@ namespace ParametricDramDirectoryMSI{
             String psc_misses_metric = String(("psc_misses_level_" + std::to_string(i + 1) + "_proposed").c_str());
             registerStatsMetric(name, core_id, psc_misses_metric, &psc_misses_per_level[i]);
             String psc_latency_metric = String(("psc_miss_latency_histogram_level_" + std::to_string(i + 1) + "_proposed").c_str());
-            registerStatsMetric(name, core_id, psc_latency_metric, &psc_miss_latency_histograms[i]);
+            // registerStatsMetric(name, core_id, psc_latency_metric, &psc_miss_latency_histograms[i]);
             String rob_stall_psc_metric = String(("rob_stall_psc_level_" + std::to_string(i + 1) + "_cycles").c_str());
             registerStatsMetric(name, core_id, rob_stall_psc_metric, &rob_stall_psc_level_cycles[i]);
             for (int where = 0; where < HitWhere::NUM_HITWHERES; ++where){
                 HitWhere::where_t where_type = static_cast<HitWhere::where_t>(where);
-                String where_name = String(sanitizeMetricName(HitWhereString(where_type)).c_str());
+                String where_name = String(HitWhereString(where_type));
                 String psc_hitwhere_metric = String(("psc_miss_hitwhere_" + std::string(where_name.c_str()) + "_level_" + std::to_string(i + 1) + "_proposed").c_str());
                 registerStatsMetric(name, core_id, psc_hitwhere_metric, &psc_miss_hit_where_counts[i][where]);
             }
@@ -126,7 +126,7 @@ namespace ParametricDramDirectoryMSI{
         registerStatsMetric(name, core_id, "psc_misses_total_proposed", &psc_misses);
         registerStatsMetric(name, core_id, "rob_stall_stlb_miss_cycles", &rob_stall_stlb_miss_cycles);
         registerStatsMetric(name, core_id, "ptw_traversal_paths_unique_proposed", &traversal_paths_unique_count);
-        registerStatsMetric(name, core_id, "tlb_miss_service_latency_histogram_proposed", &stlb_miss_latency_histogram);
+        // registerStatsMetric(name, core_id, "tlb_miss_service_latency_histogram_proposed", &stlb_miss_latency_histogram);
         
         counter++;
 
@@ -170,6 +170,7 @@ namespace ParametricDramDirectoryMSI{
                 }
                 it->second++;
             };
+            
             if(ptb){
                 PageTableBuffer::LookupResult lookup_result = ptb->lookup(vpn_indices, count);
                 ptb_latency = lookup_result.latency;
@@ -255,7 +256,7 @@ namespace ParametricDramDirectoryMSI{
                     mem_manager->tagCachesBlockType(cache_address,CacheBlockInfo::block_type_t::PAGE_TABLE);
 
                     recordLevelStats(0, total_latency, &hit_where);
-                    if(page_walk_cache_enabled && allow_psc_lookup && count){
+                    if(page_walk_cache_enabled && count){
                         psc_misses++;
                         psc_misses_per_level[level_index]++;
                         psc_miss_latency_histograms[level_index].update(SubsecondTime::divideRounded(total_latency, core->getDvfsDomain()->getPeriod()));
@@ -626,7 +627,7 @@ namespace ParametricDramDirectoryMSI{
                     fprintf(fp, "  %s: %" PRIu64 "\n", entry.first.c_str(), entry.second);
                 }
             }
-            String tlb_label = "[Core " + std::to_string(core_id) + "] proposed TLB miss service latency histogram (cycles)";
+            String tlb_label(("[Core " + std::to_string(core_id) + "] proposed TLB miss service latency histogram (cycles)").c_str());
             stlb_miss_latency_histogram.print(fp, tlb_label.c_str());
             double total_ns = static_cast<double>(total_walk_latency.getNS());
             if(total_ns > 0){
