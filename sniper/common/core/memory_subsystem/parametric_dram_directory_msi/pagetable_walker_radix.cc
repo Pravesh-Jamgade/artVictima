@@ -414,7 +414,10 @@ namespace ParametricDramDirectoryMSI{
             bool pd_level = ptb_pd_mode && (level_index == stats_radix.number_of_levels - 2);
             bool pd_psc_miss = pd_level && page_walk_cache_enabled && allow_psc_lookup && !pwc_hit;
 
-            if (pd_psc_miss && new_table->entries[a1].next_level_table)
+            // Prefetch the leaf PTE after a PD-level PSC miss (hit or page-fault path).
+            if (pd_psc_miss
+                && new_table->entries[a1].entry_type == ptw_table_entry_type::PTW_TABLE_POINTER
+                && new_table->entries[a1].next_level_table)
             {
                 std::vector<uint64_t> vpn_indices = computeVpnIndices(address);
                 uint64_t leaf_index = vpn_indices.back();
