@@ -60,7 +60,9 @@
             std::vector<UInt64> psc_misses_per_level;
             std::vector<ProposedHistogram> psc_miss_latency_histograms;
             std::vector<std::array<UInt64, HitWhere::NUM_HITWHERES>> psc_miss_hit_where_counts;
+            std::vector<UInt64> rob_stall_psc_level_cycles;
             ProposedHistogram stlb_miss_latency_histogram;
+            UInt64 rob_stall_stlb_miss_cycles;
             UInt64 psc_accesses;
             UInt64 psc_misses;
             std::map<std::string, UInt64> traversal_path_counts;
@@ -68,7 +70,7 @@
             SubsecondTime total_walk_latency;
             SubsecondTime total_ptb_latency;
             SubsecondTime init_walk(IntPtr eip, IntPtr address, UtopiaCache* shadow_cache, CacheCntlr *_cache,Core::lock_signal_t lock_signal,Byte* data_buf, UInt32 data_length,bool modeled, bool count) ;
-            SubsecondTime InitializeWalkRecursive(IntPtr eip, IntPtr address,int level,ptw_table* new_table,Core::lock_signal_t lock_signal,Byte* data_buf, UInt32 data_length,bool modeled, bool count, std::string &traversal_path);
+            SubsecondTime InitializeWalkRecursive(IntPtr eip, IntPtr address,int level,ptw_table* new_table,Core::lock_signal_t lock_signal,Byte* data_buf, UInt32 data_length,bool modeled, bool count, std::string &traversal_path, bool allow_psc_lookup);
             int init_walk_functional(IntPtr address);
             int init_walk_recursive_functional(IntPtr address,int level,ptw_table* new_table);
             bool isPageFault(IntPtr address);

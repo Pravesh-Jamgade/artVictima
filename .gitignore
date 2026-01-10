@@ -76,6 +76,7 @@ sniper/mcpat/
 sniper/python_kit/
 sniper/sift/
 sniper/xed_kit
+sniper/xed/
 *jobfile.sh
 # Job files
 *jobfile*.sh
