@@ -115,12 +115,12 @@ namespace ParametricDramDirectoryMSI{
             // registerStatsMetric(name, core_id, psc_latency_metric, &psc_miss_latency_histograms[i]);
             String rob_stall_psc_metric = String(("rob_stall_psc_level_" + std::to_string(i + 1) + "_cycles").c_str());
             registerStatsMetric(name, core_id, rob_stall_psc_metric, &rob_stall_psc_level_cycles[i]);
-            for (int where = 0; where < HitWhere::NUM_HITWHERES; ++where){
-                HitWhere::where_t where_type = static_cast<HitWhere::where_t>(where);
-                String where_name = String(HitWhereString(where_type));
-                String psc_hitwhere_metric = String(("psc_miss_hitwhere_" + std::string(where_name.c_str()) + "_level_" + std::to_string(i + 1) + "_proposed").c_str());
-                registerStatsMetric(name, core_id, psc_hitwhere_metric, &psc_miss_hit_where_counts[i][where]);
-            }
+            // for (int where = 0; where < HitWhere::NUM_HITWHERES; ++where){
+            //     HitWhere::where_t where_type = static_cast<HitWhere::where_t>(where);
+            //     String where_name = String(HitWhereString(where_type));
+            //     String psc_hitwhere_metric = String(("psc_miss_hitwhere_" + std::string(where_name.c_str()) + "_level_" + std::to_string(i + 1) + "_proposed").c_str());
+            //     registerStatsMetric(name, core_id, psc_hitwhere_metric, &psc_miss_hit_where_counts[i][where]);
+            // }
         }
         registerStatsMetric(name, core_id, "psc_accesses_proposed", &psc_accesses);
         registerStatsMetric(name, core_id, "psc_misses_total_proposed", &psc_misses);
@@ -431,7 +431,7 @@ namespace ParametricDramDirectoryMSI{
                     Core::mem_op_t::READ,
                     leaf_address, 0,
                     data_buf, data_length,
-                    false,
+                    true,
                     false, CacheBlockInfo::block_type_t::PAGE_TABLE, SubsecondTime::Zero());
                 pwc->lookup(leaf_address, prefetch_time, true, level + 1, false);
                 m_shmem_perf_model->setElapsedTime(ShmemPerfModel::_USER_THREAD, prefetch_time);
