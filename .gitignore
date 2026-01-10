@@ -69,7 +69,6 @@ python_kit/*
 # Directories containing build artifacts or external tools
 sniper/decoder_lib/
 sniper/frontend/
-sniper/include/
 sniper/lib/
 sniper/mbuild/
 sniper/mcpat/
