@@ -30,18 +30,42 @@ EXPERIMENT_CONFIGS = {
         "config": "/app/sniper/config/virtual_memory_configs/radix.cfg",
         "label": "baseline",
     },
-    "baseline-virtualized": {
-        "config": "/app/sniper/config/virtual_memory_configs/radix_virtual.cfg",
-        "label": "baseline_virtual",
-    },
+    # "baseline-virtualized": {
+    #     "config": "/app/sniper/config/virtual_memory_configs/virtualized.cfg",
+    #     "label": "baseline_virtual",
+    # },
     "ptb": {
         "config": "/app/sniper/config/virtual_memory_configs/ptb.cfg",
         "label": "ptb",
     },
-    "ptb-virtualized": {
-        "config": "/app/sniper/config/virtual_memory_configs/ptb_virtual.cfg",
-        "label": "ptb_virtual",
+    "ptb-pd": {
+        "config": "/app/sniper/config/virtual_memory_configs/ptbpd.cfg",
+        "label": "ptb-pd",
     },
+    # "ptb-virtualized": {
+    #     "config": "/app/sniper/config/virtual_memory_configs/ptb_virtual.cfg",
+    #     "label": "ptb_virtual",
+    # },
+
+    "victima": {
+        "config": "/app/sniper/config/virtual_memory_configs/victima.cfg",
+        "label": "victima",
+    },
+
+    "utopia": {
+        "config": "/app/sniper/config/virtual_memory_configs/utopia.cfg",
+        "label": "utopia",
+    },
+
+    "potm": {
+        "config": "/app/sniper/config/virtual_memory_configs/potm.cfg",
+        "label": "potm",
+    },
+
+    # "victima-virtualized": {
+    #     "config": "/app/sniper/config/virtual_memory_configs/victima_virtual.cfg",
+    #     "label": "victima_virtual",
+    # },
 }
 
 # "baseline": {
@@ -153,6 +177,11 @@ def csv_choices(value_string):
         "baseline-virtualized",
         "ptb",
         "ptb-virtualized",
+        "ptb-pd",
+        "victima",
+        "victima-virtualized",
+        "utopia",
+        "potm",
         "custom",
     ]
     values = [v.strip() for v in value_string.split(",")]
@@ -217,7 +246,7 @@ def build_commands(args: argparse.Namespace) -> List[Tuple[str, str]]:
             os.makedirs(output_dir, exist_ok=True)
 
             trace_command = f"--traces={os.path.join(args.traces_dir, trace)}"
-            output_command = f"-d {output_dir}"
+            output_command = f"-d /app/{output_dir}"
             config_command = f"-c {config_path}"
             job_label = f"{experiment_label}_{trace_name}"
 
