@@ -30,6 +30,7 @@
         ProposedHistogram() : total(0), min(0), max(0) { buckets.fill(0); }
         void update(UInt64 value);
         void print(FILE *fp, const char *label, int width = 40) const;
+        void printCsv(FILE *fp, const char *metric_name) const;
     };
 
     class PageTableWalkerRadix: public PageTableWalker{
