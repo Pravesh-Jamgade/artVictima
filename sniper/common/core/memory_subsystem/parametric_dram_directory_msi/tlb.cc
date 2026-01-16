@@ -17,6 +17,7 @@
 #include "memory_manager.h"
 #include <inttypes.h>
 #include <string>
+#include <vector>
 
 //#define DEBUG_TLB
 //#define TLB_STATS
@@ -629,14 +630,34 @@ namespace ParametricDramDirectoryMSI
   TLB::~TLB()
   {
     if(is_dtlb && !dtlb_traversal_path_counts.empty()){
-      String output_path = Sim()->getConfig()->formatOutputFileName("proposed.stats");
-      FILE *fp = fopen(output_path.c_str(), "a");
-      if(fp){
-        fprintf(fp, "[Core %d] proposed DTLB traversal paths (%" PRIu64 "):\n", m_core_id, dtlb_traversal_paths_unique_count);
+      String stats_output_path = Sim()->getConfig()->formatOutputFileName("proposed.stats");
+      FILE *stats_fp = fopen(stats_output_path.c_str(), "a");
+      if(stats_fp){
+        fprintf(stats_fp, "[Core %d] proposed DTLB traversal paths (%" PRIu64 "):\n", m_core_id, dtlb_traversal_paths_unique_count);
         for(const auto &entry : dtlb_traversal_path_counts){
-          fprintf(fp, "  %s: %" PRIu64 "\n", entry.first.c_str(), entry.second);
+          fprintf(stats_fp, "  %s: %" PRIu64 "\n", entry.first.c_str(), entry.second);
         }
-        fclose(fp);
+        fclose(stats_fp);
+      }
+
+      String csv_output_path = Sim()->getConfig()->formatOutputFileName("proposed.csv");
+      FILE *csv_fp = fopen(csv_output_path.c_str(), "a");
+      if(csv_fp){
+        std::vector<std::pair<std::string, UInt64>> path_entries;
+        path_entries.reserve(dtlb_traversal_path_counts.size());
+        for(const auto &entry : dtlb_traversal_path_counts)
+          path_entries.emplace_back(entry.first, entry.second);
+        if(!path_entries.empty()){
+          fprintf(csv_fp, "proposed_DTLB_traversal_paths");
+          for (const auto &entry : path_entries)
+            fprintf(csv_fp, ",%s", entry.first.c_str());
+          fprintf(csv_fp, "\n");
+          fprintf(csv_fp, "proposed_DTLB_traversal_paths");
+          for (const auto &entry : path_entries)
+            fprintf(csv_fp, ",%" PRIu64, entry.second);
+          fprintf(csv_fp, "\n");
+        }
+        fclose(csv_fp);
       }
     }
   }

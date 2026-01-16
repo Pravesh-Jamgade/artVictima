@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <algorithm>
+#include <sstream>
 
 
 namespace ParametricDramDirectoryMSI{
@@ -57,6 +58,53 @@ namespace ParametricDramDirectoryMSI{
             for (int c = 0; c < bar_len; ++c)
                 fputc('#', fp);
             fprintf(fp, " (%" PRIu64 ")\n", count);
+        }
+    }
+
+    void ProposedHistogram::printCsv(FILE *fp, const char *metric_name) const{
+        if(!fp)
+            return;
+        std::vector<std::pair<std::string, UInt64>> entries;
+        entries.reserve(kBuckets);
+        for (int idx = 0; idx < kBuckets; ++idx){
+            UInt64 count = buckets[idx];
+            if(!count)
+                continue;
+            UInt64 range_start = (idx == 0) ? 0 : (UInt64(1) << idx);
+            std::ostringstream label;
+            label << "[" << range_start << "..";
+            if(idx + 1 < kBuckets){
+                UInt64 range_end = (UInt64(1) << (idx + 1)) - 1;
+                label << range_end << "]";
+            } else {
+                label << "inf]";
+            }
+            entries.emplace_back(label.str(), count);
+        }
+        if(entries.empty())
+            return;
+        fprintf(fp, "%s", metric_name);
+        for (const auto &entry : entries)
+            fprintf(fp, ",%s", entry.first.c_str());
+        fprintf(fp, "\n");
+        fprintf(fp, "%s", metric_name);
+        for (const auto &entry : entries)
+            fprintf(fp, ",%" PRIu64, entry.second);
+        fprintf(fp, "\n");
+    }
+
+    namespace {
+        void printCsvLabeledCounts(FILE *fp, const char *metric_name, const std::vector<std::pair<std::string, UInt64>> &entries){
+            if(!fp || entries.empty())
+                return;
+            fprintf(fp, "%s", metric_name);
+            for (const auto &entry : entries)
+                fprintf(fp, ",%s", entry.first.c_str());
+            fprintf(fp, "\n");
+            fprintf(fp, "%s", metric_name);
+            for (const auto &entry : entries)
+                fprintf(fp, ",%" PRIu64, entry.second);
+            fprintf(fp, "\n");
         }
     }
 
@@ -594,47 +642,92 @@ namespace ParametricDramDirectoryMSI{
         double avg_stall_cycles = walks ? static_cast<double>(SubsecondTime::divideRounded(total_walk_latency, period)) / walks : 0.0;
         double cpi_on_stlb_miss = 1.0 + avg_stall_cycles;
 
-        String output_path = Sim()->getConfig()->formatOutputFileName("proposed.stats");
-        FILE *fp = fopen(output_path.c_str(), "a");
-        if(fp){
-            fprintf(fp, "[Core %d] proposed STLB miss CPI: %.4f (avg stall cycles %.2f over %" PRIu64 " walks)\n",
+        String stats_output_path = Sim()->getConfig()->formatOutputFileName("proposed.stats");
+        FILE *stats_fp = fopen(stats_output_path.c_str(), "a");
+        if(stats_fp){
+            fprintf(stats_fp, "[Core %d] proposed STLB miss CPI: %.4f (avg stall cycles %.2f over %" PRIu64 " walks)\n",
                     core_id, cpi_on_stlb_miss, avg_stall_cycles, walks);
             if(psc_accesses > 0){
                 double psc_miss_rate = (static_cast<double>(psc_misses) / static_cast<double>(psc_accesses)) * 100.0;
-                fprintf(fp, "[Core %d] proposed PSC miss rate: %.2f%% (%" PRIu64 "/%" PRIu64 ")\n",
+                fprintf(stats_fp, "[Core %d] proposed PSC miss rate: %.2f%% (%" PRIu64 "/%" PRIu64 ")\n",
                         core_id, psc_miss_rate, psc_misses, psc_accesses);
                 for (int lvl = 0; lvl < stats_radix.number_of_levels; ++lvl){
-                    fprintf(fp, "  proposed PSC level %d hits %" PRIu64 ", misses %" PRIu64 "\n",
+                    fprintf(stats_fp, "  proposed PSC level %d hits %" PRIu64 ", misses %" PRIu64 "\n",
                             lvl+1, psc_hits_per_level[lvl], psc_misses_per_level[lvl]);
                     String label = String(("  proposed PSC level " + std::to_string(lvl + 1) + " miss latency histogram (cycles)").c_str());
-                    psc_miss_latency_histograms[lvl].print(fp, label.c_str());
+                    psc_miss_latency_histograms[lvl].print(stats_fp, label.c_str());
                     bool printed_hitwhere = false;
                     for (int where = 0; where < HitWhere::NUM_HITWHERES; ++where){
                         UInt64 count = psc_miss_hit_where_counts[lvl][where];
                         if(!count)
                             continue;
                         if(!printed_hitwhere){
-                            fprintf(fp, "    proposed PSC level %d miss HitWhere histogram:\n", lvl+1);
+                            fprintf(stats_fp, "    proposed PSC level %d miss HitWhere histogram:\n", lvl+1);
                             printed_hitwhere = true;
                         }
-                        fprintf(fp, "      %s: %" PRIu64 "\n", HitWhereString(static_cast<HitWhere::where_t>(where)), count);
+                        fprintf(stats_fp, "      %s: %" PRIu64 "\n", HitWhereString(static_cast<HitWhere::where_t>(where)), count);
                     }
                 }
             }
             if(!traversal_path_counts.empty()){
-                fprintf(fp, "[Core %d] proposed PTW traversal paths (%" PRIu64 "):\n", core_id, traversal_paths_unique_count);
+                fprintf(stats_fp, "[Core %d] proposed PTW traversal paths (%" PRIu64 "):\n", core_id, traversal_paths_unique_count);
                 for(const auto &entry : traversal_path_counts){
-                    fprintf(fp, "  %s: %" PRIu64 "\n", entry.first.c_str(), entry.second);
+                    fprintf(stats_fp, "  %s: %" PRIu64 "\n", entry.first.c_str(), entry.second);
                 }
             }
             String tlb_label(("[Core " + std::to_string(core_id) + "] proposed TLB miss service latency histogram (cycles)").c_str());
-            stlb_miss_latency_histogram.print(fp, tlb_label.c_str());
+            stlb_miss_latency_histogram.print(stats_fp, tlb_label.c_str());
             double total_ns = static_cast<double>(total_walk_latency.getNS());
             if(total_ns > 0){
                 double ptb_share = static_cast<double>(total_ptb_latency.getNS()) / total_ns * 100.0;
-                fprintf(fp, "[Core %d] proposed PTB latency share: %.2f%%\n", core_id, ptb_share);
+                fprintf(stats_fp, "[Core %d] proposed PTB latency share: %.2f%%\n", core_id, ptb_share);
             }
-            fclose(fp);
+            fclose(stats_fp);
+        }
+
+        String csv_output_path = Sim()->getConfig()->formatOutputFileName("proposed.csv");
+        FILE *csv_fp = fopen(csv_output_path.c_str(), "a");
+        if(csv_fp){
+            fprintf(csv_fp, "proposed_STLB_miss_CPI,%.4f\n", cpi_on_stlb_miss);
+            fprintf(csv_fp, "proposed_STLB_miss_avg_stall_cycles,%.2f\n", avg_stall_cycles);
+            fprintf(csv_fp, "proposed_STLB_miss_walks,%" PRIu64 "\n", walks);
+            if(psc_accesses > 0){
+                double psc_miss_rate = (static_cast<double>(psc_misses) / static_cast<double>(psc_accesses)) * 100.0;
+                fprintf(csv_fp, "proposed_PSC_miss_rate_pct,%.2f\n", psc_miss_rate);
+                fprintf(csv_fp, "proposed_PSC_misses,%" PRIu64 "\n", psc_misses);
+                fprintf(csv_fp, "proposed_PSC_accesses,%" PRIu64 "\n", psc_accesses);
+                for (int lvl = 0; lvl < stats_radix.number_of_levels; ++lvl){
+                    fprintf(csv_fp, "proposed_PSC_L%d_hits,%" PRIu64 "\n", lvl + 1, psc_hits_per_level[lvl]);
+                    fprintf(csv_fp, "proposed_PSC_L%d_misses,%" PRIu64 "\n", lvl + 1, psc_misses_per_level[lvl]);
+                    String label = String(("proposed_PSC_L" + std::to_string(lvl + 1) + "_miss_latency_cycles").c_str());
+                    psc_miss_latency_histograms[lvl].printCsv(csv_fp, label.c_str());
+                    std::vector<std::pair<std::string, UInt64>> hitwhere_entries;
+                    for (int where = 0; where < HitWhere::NUM_HITWHERES; ++where){
+                        UInt64 count = psc_miss_hit_where_counts[lvl][where];
+                        if(!count)
+                            continue;
+                        hitwhere_entries.emplace_back(HitWhereString(static_cast<HitWhere::where_t>(where)), count);
+                    }
+                    if(!hitwhere_entries.empty()){
+                        String hitwhere_label = String(("proposed_PSC_L" + std::to_string(lvl + 1) + "_miss_hitwhere").c_str());
+                        printCsvLabeledCounts(csv_fp, hitwhere_label.c_str(), hitwhere_entries);
+                    }
+                }
+            }
+            if(!traversal_path_counts.empty()){
+                std::vector<std::pair<std::string, UInt64>> path_entries;
+                path_entries.reserve(traversal_path_counts.size());
+                for(const auto &entry : traversal_path_counts)
+                    path_entries.emplace_back(entry.first, entry.second);
+                printCsvLabeledCounts(csv_fp, "proposed_PTW_traversal_paths", path_entries);
+            }
+            stlb_miss_latency_histogram.printCsv(csv_fp, "proposed_TLB_miss_service_latency_cycles");
+            double total_ns = static_cast<double>(total_walk_latency.getNS());
+            if(total_ns > 0){
+                double ptb_share = static_cast<double>(total_ptb_latency.getNS()) / total_ns * 100.0;
+                fprintf(csv_fp, "proposed_PTB_latency_share_pct,%.2f\n", ptb_share);
+            }
+            fclose(csv_fp);
         }
     }
 
