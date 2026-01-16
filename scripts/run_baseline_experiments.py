@@ -27,61 +27,61 @@ SNIPER_COMMAND = "/app/sniper/run-sniper -s stop-by-icount:500000000 --genstats 
 
 EXPERIMENT_CONFIGS = {
      "baseline": {
-        "config": "/app/sniper/config/virtual_memory_configs/radix.cfg",
+        "config": "/app/sniper/config/virtual_memory/radix.cfg",
         "label": "baseline",
     },
     # "baseline-virtualized": {
-    #     "config": "/app/sniper/config/virtual_memory_configs/virtualized.cfg",
+    #     "config": "/app/sniper/config/virtual_memory/virtualized.cfg",
     #     "label": "baseline_virtual",
     # },
     "ptb": {
-        "config": "/app/sniper/config/virtual_memory_configs/ptb.cfg",
+        "config": "/app/sniper/config/virtual_memory/ptb.cfg",
         "label": "ptb",
     },
     "ptb-pd": {
-        "config": "/app/sniper/config/virtual_memory_configs/ptbpd.cfg",
+        "config": "/app/sniper/config/virtual_memory/ptbpd.cfg",
         "label": "ptb-pd",
     },
     # "ptb-virtualized": {
-    #     "config": "/app/sniper/config/virtual_memory_configs/ptb_virtual.cfg",
+    #     "config": "/app/sniper/config/virtual_memory/ptb_virtual.cfg",
     #     "label": "ptb_virtual",
     # },
 
     "victima": {
-        "config": "/app/sniper/config/virtual_memory_configs/victima.cfg",
+        "config": "/app/sniper/config/virtual_memory/victima.cfg",
         "label": "victima",
     },
 
     "utopia": {
-        "config": "/app/sniper/config/virtual_memory_configs/utopia.cfg",
+        "config": "/app/sniper/config/virtual_memory/utopia.cfg",
         "label": "utopia",
     },
 
     "potm": {
-        "config": "/app/sniper/config/virtual_memory_configs/potm.cfg",
+        "config": "/app/sniper/config/virtual_memory/potm.cfg",
         "label": "potm",
     },
 
     # "victima-virtualized": {
-    #     "config": "/app/sniper/config/virtual_memory_configs/victima_virtual.cfg",
+    #     "config": "/app/sniper/config/virtual_memory/victima_virtual.cfg",
     #     "label": "victima_virtual",
     # },
 }
 
 # "baseline": {
-#         "config": "/app/sniper/config/virtual_memory_configs_multicore/radix.cfg",
+#         "config": "/app/sniper/config/virtual_memory_multicore/radix.cfg",
 #         "label": "baseline",
 #     },
 #     "baseline-virtualized": {
-#         "config": "/app/sniper/config/virtual_memory_configs_multicore/radix_virtual.cfg",
+#         "config": "/app/sniper/config/virtual_memory_multicore/radix_virtual.cfg",
 #         "label": "baseline_virtual",
 #     },
 #     "ptb": {
-#         "config": "/app/sniper/config/virtual_memory_configs_multicore/ptb.cfg",
+#         "config": "/app/sniper/config/virtual_memory_multicore/ptb.cfg",
 #         "label": "ptb",
 #     },
 #     "ptb-virtualized": {
-#         "config": "/app/sniper/config/virtual_memory_configs_multicore/ptb_virtual.cfg",
+#         "config": "/app/sniper/config/virtual_memory_multicore/ptb_virtual.cfg",
 #         "label": "ptb_virtual",
 #     },
 
