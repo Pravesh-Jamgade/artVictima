@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <algorithm>
+#include <sstream>
 
 
 namespace ParametricDramDirectoryMSI{
@@ -24,6 +25,7 @@ namespace ParametricDramDirectoryMSI{
         }
         buckets[bucket]++;
         total++;
+        sum += value;
         if(total == 1){
             min = value;
             max = value;
@@ -33,13 +35,17 @@ namespace ParametricDramDirectoryMSI{
         }
     }
 
+    double ProposedHistogram::average() const{
+        return total ? static_cast<double>(sum) / static_cast<double>(total) : 0.0;
+    }
+
     void ProposedHistogram::print(FILE *fp, const char *label, int width) const{
         if(!fp)
             return;
         UInt64 max_count = 0;
         for (UInt64 count : buckets)
             max_count = std::max(max_count, count);
-        fprintf(fp, "%s (total=%" PRIu64 ", min=%" PRIu64 ", max=%" PRIu64 ")\n", label, total, min, max);
+        fprintf(fp, "%s (total=%" PRIu64 ", min=%" PRIu64 ", max=%" PRIu64 ", avg=%.2f)\n", label, total, min, max, average());
         if(max_count == 0)
             return;
         for (int idx = 0; idx < kBuckets; ++idx){
@@ -57,6 +63,54 @@ namespace ParametricDramDirectoryMSI{
             for (int c = 0; c < bar_len; ++c)
                 fputc('#', fp);
             fprintf(fp, " (%" PRIu64 ")\n", count);
+        }
+    }
+
+    void ProposedHistogram::printCsv(FILE *fp, const char *metric_name) const{
+        if(!fp)
+            return;
+        fprintf(fp, "%s_avg,%.2f\n", metric_name, average());
+        std::vector<std::pair<std::string, UInt64>> entries;
+        entries.reserve(kBuckets);
+        for (int idx = 0; idx < kBuckets; ++idx){
+            UInt64 count = buckets[idx];
+            if(!count)
+                continue;
+            UInt64 range_start = (idx == 0) ? 0 : (UInt64(1) << idx);
+            std::ostringstream label;
+            label << "[" << range_start << "..";
+            if(idx + 1 < kBuckets){
+                UInt64 range_end = (UInt64(1) << (idx + 1)) - 1;
+                label << range_end << "]";
+            } else {
+                label << "inf]";
+            }
+            entries.emplace_back(label.str(), count);
+        }
+        if(entries.empty())
+            return;
+        fprintf(fp, "%s", metric_name);
+        for (const auto &entry : entries)
+            fprintf(fp, ",%s", entry.first.c_str());
+        fprintf(fp, "\n");
+        fprintf(fp, "%s", metric_name);
+        for (const auto &entry : entries)
+            fprintf(fp, ",%" PRIu64, entry.second);
+        fprintf(fp, "\n");
+    }
+
+    namespace {
+        void printCsvLabeledCounts(FILE *fp, const char *metric_name, const std::vector<std::pair<std::string, UInt64>> &entries){
+            if(!fp || entries.empty())
+                return;
+            fprintf(fp, "%s", metric_name);
+            for (const auto &entry : entries)
+                fprintf(fp, ",%s", entry.first.c_str());
+            fprintf(fp, "\n");
+            fprintf(fp, "%s", metric_name);
+            for (const auto &entry : entries)
+                fprintf(fp, ",%" PRIu64, entry.second);
+            fprintf(fp, "\n");
         }
     }
 
@@ -91,6 +145,7 @@ namespace ParametricDramDirectoryMSI{
         psc_hits_per_level.resize(number_of_levels, 0);
         psc_misses_per_level.resize(number_of_levels, 0);
         psc_miss_latency_histograms.resize(number_of_levels);
+        psc_miss_latency_total_cycles.resize(number_of_levels, 0);
         psc_miss_hit_where_counts.resize(number_of_levels);
         for (auto &counts : psc_miss_hit_where_counts)
             counts.fill(0);
@@ -99,6 +154,8 @@ namespace ParametricDramDirectoryMSI{
         psc_misses = 0;
         rob_stall_stlb_miss_cycles = 0;
         traversal_paths_unique_count = 0;
+        last_psc_miss_level_index = -1;
+        last_psc_miss_hitwhere = HitWhere::where_t();
         total_walk_latency = SubsecondTime::Zero();
         total_ptb_latency = SubsecondTime::Zero();
         name = "ptw_radix_";
@@ -155,6 +212,30 @@ namespace ParametricDramDirectoryMSI{
             auto append_psc_event = [&](int level, const std::string &event) {
                 traversal_path += "->PSC-L" + std::to_string(level) + "-" + event;
             };
+            size_t combo_levels = std::min<size_t>(stats_radix.number_of_levels, 4);
+            PscCombinationState psc_state(combo_levels);
+            auto record_combination = [&]() {
+                if(!count || !page_walk_cache_enabled)
+                    return;
+                bool complete = true;
+                for(char outcome : psc_state.outcomes){
+                    if(outcome == '?'){
+                        complete = false;
+                        break;
+                    }
+                }
+                if(!complete)
+                    return;
+                std::string key(psc_state.outcomes.begin(), psc_state.outcomes.end());
+                auto [it, inserted] = psc_combination_hitwhere_counts.emplace(
+                    key, std::array<UInt64, HitWhere::NUM_HITWHERES + 1>{});
+                auto &counts = it->second;
+                if(inserted)
+                    counts.fill(0);
+                size_t index = psc_state.any_miss ? static_cast<size_t>(psc_state.miss_hitwhere) : HitWhere::NUM_HITWHERES;
+                if(index < counts.size())
+                    counts[index]++;
+            };
             // Pravesh:1 Track ROB stall cycles for STLB-miss translation, and split by PSC level.
             auto record_rob_stall_cycles = [&](SubsecondTime latency) {
                 if (!count)
@@ -170,6 +251,7 @@ namespace ParametricDramDirectoryMSI{
                 }
                 it->second++;
             };
+            last_psc_miss_level_index = -1;
             
             if(ptb){
                 PageTableBuffer::LookupResult lookup_result = ptb->lookup(vpn_indices, count);
@@ -179,7 +261,7 @@ namespace ParametricDramDirectoryMSI{
                     ptw_table* start_table = reinterpret_cast<ptw_table*>(lookup_result.base_address);
                     if(count)
                         traversal_path += "->PTB-HIT-L" + std::to_string(start_level);
-                    SubsecondTime walk_latency = InitializeWalkRecursive(eip, address, start_level, start_table, lock_signal, data_buf, data_length, modeled, count, traversal_path, true);
+                    SubsecondTime walk_latency = InitializeWalkRecursive(eip, address, start_level, start_table, lock_signal, data_buf, data_length, modeled, count, traversal_path, true, &psc_state);
                     SubsecondTime final_latency = ptb_latency + walk_latency;
                     total_ptb_latency += ptb_latency;
                     total_walk_latency += final_latency;
@@ -190,6 +272,7 @@ namespace ParametricDramDirectoryMSI{
                     track_per_page_ptw_latency(vpn,final_latency);
                     if(count)
                         record_traversal_path(traversal_path);
+                    record_combination();
                     return final_latency;
                 }
                 total_ptb_latency += ptb_latency;
@@ -224,6 +307,8 @@ namespace ParametricDramDirectoryMSI{
                         psc_hits_per_level[level_index]++;
                     if(count)
                         append_psc_event(level_index + 1, "HIT");
+                    if(page_walk_cache_enabled)
+                        updatePscCombinationState(&psc_state, level_index, true, HitWhere::where_t(), false);
 
             }
             else{
@@ -257,12 +342,10 @@ namespace ParametricDramDirectoryMSI{
 
                     recordLevelStats(0, total_latency, &hit_where);
                     if(page_walk_cache_enabled && count){
-                        psc_misses++;
-                        psc_misses_per_level[level_index]++;
-                        psc_miss_latency_histograms[level_index].update(SubsecondTime::divideRounded(total_latency, core->getDvfsDomain()->getPeriod()));
-                        psc_miss_hit_where_counts[level_index][hit_where]++;
-                        rob_stall_psc_level_cycles[level_index] += SubsecondTime::divideRounded(total_latency, core->getDvfsDomain()->getPeriod());
+                        recordPscMiss(level_index, total_latency, hit_where);
                     }
+                    if(page_walk_cache_enabled)
+                        updatePscCombinationState(&psc_state, level_index, false, hit_where, true);
                     if(count){
                         if(page_walk_cache_enabled)
                             append_psc_event(level_index + 1, std::string("MISS-") + HitWhereString(hit_where));
@@ -287,11 +370,12 @@ namespace ParametricDramDirectoryMSI{
                 record_rob_stall_cycles(final_latency);
                 if(count)
                     record_traversal_path(traversal_path);
+                record_combination();
                 return final_latency;
             }
 
 
-            SubsecondTime final_latency = ptb_latency + total_latency+InitializeWalkRecursive(eip, address,2,starting_table->entries[a1].next_level_table,lock_signal,data_buf,data_length, modeled, count, traversal_path, true);
+            SubsecondTime final_latency = ptb_latency + total_latency+InitializeWalkRecursive(eip, address,2,starting_table->entries[a1].next_level_table,lock_signal,data_buf,data_length, modeled, count, traversal_path, true, &psc_state);
 
             if(ptb){
                 PageTableBuffer::Mode mode = ptb->getMode();
@@ -309,6 +393,7 @@ namespace ParametricDramDirectoryMSI{
             record_rob_stall_cycles(final_latency);
             if(count)
                 record_traversal_path(traversal_path);
+            record_combination();
 
 
             return final_latency;
@@ -319,7 +404,7 @@ namespace ParametricDramDirectoryMSI{
         int level,ptw_table* new_table,
         Core::lock_signal_t lock_signal,
         Byte* data_buf, UInt32 data_length,
-        bool modeled, bool count, std::string &traversal_path, bool allow_psc_lookup){
+        bool modeled, bool count, std::string &traversal_path, bool allow_psc_lookup, PscCombinationState *psc_state){
 
             uint64_t a1;
             int shift_bits=0;
@@ -359,6 +444,8 @@ namespace ParametricDramDirectoryMSI{
                         psc_hits_per_level[level_index]++;
                     if(count)
                         traversal_path += "->PSC-L" + std::to_string(level_index + 1) + "-HIT";
+                    if(page_walk_cache_enabled)
+                        updatePscCombinationState(psc_state, level_index, true, HitWhere::where_t(), false);
                     recordLevelStats(level-1, total_latency);
             }
             else{
@@ -388,12 +475,10 @@ namespace ParametricDramDirectoryMSI{
                     mem_manager->tagCachesBlockType(cache_address,CacheBlockInfo::block_type_t::PAGE_TABLE);
                     recordLevelStats(level-1, total_latency, &hit_where);
                     if(page_walk_cache_enabled && count){
-                        psc_misses++;
-                        psc_misses_per_level[level_index]++;
-                        psc_miss_latency_histograms[level_index].update(SubsecondTime::divideRounded(total_latency, core->getDvfsDomain()->getPeriod()));
-                        psc_miss_hit_where_counts[level_index][hit_where]++;
-                        rob_stall_psc_level_cycles[level_index] += SubsecondTime::divideRounded(total_latency, core->getDvfsDomain()->getPeriod());
+                        recordPscMiss(level_index, total_latency, hit_where);
                     }
+                    if(page_walk_cache_enabled)
+                        updatePscCombinationState(psc_state, level_index, false, hit_where, true);
                     if(count){
                         if(page_walk_cache_enabled && allow_psc_lookup)
                             traversal_path += "->PSC-L" + std::to_string(level_index + 1) + "-MISS-" + HitWhereString(hit_where);
@@ -437,8 +522,38 @@ namespace ParametricDramDirectoryMSI{
                 m_shmem_perf_model->setElapsedTime(ShmemPerfModel::_USER_THREAD, prefetch_time);
             }
 
-            return total_latency+InitializeWalkRecursive(eip,address,level+1,new_table->entries[a1].next_level_table,lock_signal,data_buf,data_length,modeled,count, traversal_path, allow_psc_lookup && !pd_psc_miss);
+            return total_latency+InitializeWalkRecursive(eip,address,level+1,new_table->entries[a1].next_level_table,lock_signal,data_buf,data_length,modeled,count, traversal_path, allow_psc_lookup && !pd_psc_miss, psc_state);
         
+    }
+    void PageTableWalkerRadix::recordPscMiss(int level_index, SubsecondTime latency, HitWhere::where_t hit_where){
+        UInt64 cycles = SubsecondTime::divideRounded(latency, core->getDvfsDomain()->getPeriod());
+        psc_misses++;
+        psc_misses_per_level[level_index]++;
+        psc_miss_latency_histograms[level_index].update(cycles);
+        psc_miss_hit_where_counts[level_index][hit_where]++;
+        psc_miss_latency_total_cycles[level_index] += cycles;
+        rob_stall_psc_level_cycles[level_index] += cycles;
+        if(last_psc_miss_level_index >= 0){
+            std::string pair_label = "L" + std::to_string(last_psc_miss_level_index + 1)
+                + "->L" + std::to_string(level_index + 1)
+                + ":" + std::string(HitWhereString(last_psc_miss_hitwhere))
+                + "->" + std::string(HitWhereString(hit_where));
+            psc_miss_hitwhere_pair_counts[pair_label]++;
+        }
+        last_psc_miss_level_index = level_index;
+        last_psc_miss_hitwhere = hit_where;
+    }
+
+    void PageTableWalkerRadix::updatePscCombinationState(PscCombinationState *psc_state, int level_index, bool hit, HitWhere::where_t hit_where, bool has_hitwhere){
+        if(!psc_state)
+            return;
+        if(level_index < 0 || level_index >= static_cast<int>(psc_state->outcomes.size()))
+            return;
+        psc_state->outcomes[level_index] = hit ? 'H' : 'M';
+        if(!hit && has_hitwhere){
+            psc_state->miss_hitwhere = static_cast<int>(hit_where);
+            psc_state->any_miss = true;
+        }
     }
     int PageTableWalkerRadix::init_walk_functional(IntPtr address){
         uint64_t a1;
@@ -591,50 +706,161 @@ namespace ParametricDramDirectoryMSI{
     PageTableWalkerRadix::~PageTableWalkerRadix(){
         UInt64 walks = stats.page_walks;
         SubsecondTime period = core->getDvfsDomain()->getPeriod();
-        double avg_stall_cycles = walks ? static_cast<double>(SubsecondTime::divideRounded(total_walk_latency, period)) / walks : 0.0;
-        double cpi_on_stlb_miss = 1.0 + avg_stall_cycles;
+        UInt64 instruction_count = core->getInstructionCount();
+        double stall_cycles_per_instruction = instruction_count
+            ? static_cast<double>(rob_stall_stlb_miss_cycles) / static_cast<double>(instruction_count)
+            : 0.0;
+        double cpi_on_stlb_miss = 1.0 + stall_cycles_per_instruction;
 
-        String output_path = Sim()->getConfig()->formatOutputFileName("proposed.stats");
-        FILE *fp = fopen(output_path.c_str(), "a");
-        if(fp){
-            fprintf(fp, "[Core %d] proposed STLB miss CPI: %.4f (avg stall cycles %.2f over %" PRIu64 " walks)\n",
-                    core_id, cpi_on_stlb_miss, avg_stall_cycles, walks);
+        String stats_output_path = Sim()->getConfig()->formatOutputFileName("proposed.stats");
+        FILE *stats_fp = fopen(stats_output_path.c_str(), "a");
+        if(stats_fp){
+            fprintf(stats_fp, "[Core %d] proposed STLB miss CPI: %.4f (stall cycles per instruction %.6f over %" PRIu64 " instructions)\n",
+                    core_id, cpi_on_stlb_miss, stall_cycles_per_instruction, instruction_count);
             if(psc_accesses > 0){
                 double psc_miss_rate = (static_cast<double>(psc_misses) / static_cast<double>(psc_accesses)) * 100.0;
-                fprintf(fp, "[Core %d] proposed PSC miss rate: %.2f%% (%" PRIu64 "/%" PRIu64 ")\n",
+                fprintf(stats_fp, "[Core %d] proposed PSC miss rate: %.2f%% (%" PRIu64 "/%" PRIu64 ")\n",
                         core_id, psc_miss_rate, psc_misses, psc_accesses);
+                UInt64 total_miss_cycles = 0;
+                for (UInt64 level_cycles : psc_miss_latency_total_cycles)
+                    total_miss_cycles += level_cycles;
                 for (int lvl = 0; lvl < stats_radix.number_of_levels; ++lvl){
-                    fprintf(fp, "  proposed PSC level %d hits %" PRIu64 ", misses %" PRIu64 "\n",
+                    fprintf(stats_fp, "  proposed PSC level %d hits %" PRIu64 ", misses %" PRIu64 "\n",
                             lvl+1, psc_hits_per_level[lvl], psc_misses_per_level[lvl]);
+                    double avg_miss_latency = psc_misses_per_level[lvl]
+                        ? static_cast<double>(psc_miss_latency_total_cycles[lvl]) / static_cast<double>(psc_misses_per_level[lvl])
+                        : 0.0;
+                    double miss_share = total_miss_cycles
+                        ? static_cast<double>(psc_miss_latency_total_cycles[lvl]) / static_cast<double>(total_miss_cycles) * 100.0
+                        : 0.0;
+                    fprintf(stats_fp, "  proposed PSC level %d avg miss latency (cycles): %.2f\n",
+                            lvl+1, avg_miss_latency);
+                    fprintf(stats_fp, "  proposed PSC level %d miss latency share: %.2f%%\n",
+                            lvl+1, miss_share);
                     String label = String(("  proposed PSC level " + std::to_string(lvl + 1) + " miss latency histogram (cycles)").c_str());
-                    psc_miss_latency_histograms[lvl].print(fp, label.c_str());
+                    psc_miss_latency_histograms[lvl].print(stats_fp, label.c_str());
                     bool printed_hitwhere = false;
                     for (int where = 0; where < HitWhere::NUM_HITWHERES; ++where){
                         UInt64 count = psc_miss_hit_where_counts[lvl][where];
                         if(!count)
                             continue;
                         if(!printed_hitwhere){
-                            fprintf(fp, "    proposed PSC level %d miss HitWhere histogram:\n", lvl+1);
+                            fprintf(stats_fp, "    proposed PSC level %d miss HitWhere histogram:\n", lvl+1);
                             printed_hitwhere = true;
                         }
-                        fprintf(fp, "      %s: %" PRIu64 "\n", HitWhereString(static_cast<HitWhere::where_t>(where)), count);
+                        fprintf(stats_fp, "      %s: %" PRIu64 "\n", HitWhereString(static_cast<HitWhere::where_t>(where)), count);
                     }
                 }
             }
+            if(!psc_combination_hitwhere_counts.empty()){
+                fprintf(stats_fp, "  proposed PSC hit/miss combinations by HitWhere:\n");
+                for (const auto &entry : psc_combination_hitwhere_counts){
+                    fprintf(stats_fp, "    %s:", entry.first.c_str());
+                    fprintf(stats_fp, " None=%" PRIu64, entry.second[HitWhere::NUM_HITWHERES]);
+                    for (int where = 0; where < HitWhere::NUM_HITWHERES; ++where){
+                        fprintf(stats_fp, " %s=%" PRIu64,
+                                HitWhereString(static_cast<HitWhere::where_t>(where)),
+                                entry.second[where]);
+                    }
+                    fprintf(stats_fp, "\n");
+                }
+            }
+            if(!psc_miss_hitwhere_pair_counts.empty()){
+                fprintf(stats_fp, "  proposed PSC miss HitWhere pairs:\n");
+                for (const auto &entry : psc_miss_hitwhere_pair_counts)
+                    fprintf(stats_fp, "    %s: %" PRIu64 "\n", entry.first.c_str(), entry.second);
+            }
             if(!traversal_path_counts.empty()){
-                fprintf(fp, "[Core %d] proposed PTW traversal paths (%" PRIu64 "):\n", core_id, traversal_paths_unique_count);
+                fprintf(stats_fp, "[Core %d] proposed PTW traversal paths (%" PRIu64 "):\n", core_id, traversal_paths_unique_count);
                 for(const auto &entry : traversal_path_counts){
-                    fprintf(fp, "  %s: %" PRIu64 "\n", entry.first.c_str(), entry.second);
+                    fprintf(stats_fp, "  %s: %" PRIu64 "\n", entry.first.c_str(), entry.second);
                 }
             }
             String tlb_label(("[Core " + std::to_string(core_id) + "] proposed TLB miss service latency histogram (cycles)").c_str());
-            stlb_miss_latency_histogram.print(fp, tlb_label.c_str());
+            stlb_miss_latency_histogram.print(stats_fp, tlb_label.c_str());
             double total_ns = static_cast<double>(total_walk_latency.getNS());
             if(total_ns > 0){
                 double ptb_share = static_cast<double>(total_ptb_latency.getNS()) / total_ns * 100.0;
-                fprintf(fp, "[Core %d] proposed PTB latency share: %.2f%%\n", core_id, ptb_share);
+                fprintf(stats_fp, "[Core %d] proposed PTB latency share: %.2f%%\n", core_id, ptb_share);
             }
-            fclose(fp);
+            fclose(stats_fp);
+        }
+
+        String csv_output_path = Sim()->getConfig()->formatOutputFileName("proposed.csv");
+        FILE *csv_fp = fopen(csv_output_path.c_str(), "a");
+        if(csv_fp){
+            fprintf(csv_fp, "proposed_STLB_miss_CPI,%.4f\n", cpi_on_stlb_miss);
+            fprintf(csv_fp, "proposed_STLB_miss_stall_cycles_per_instruction,%.6f\n", stall_cycles_per_instruction);
+            fprintf(csv_fp, "proposed_STLB_miss_instruction_count,%" PRIu64 "\n", instruction_count);
+            fprintf(csv_fp, "proposed_STLB_miss_walks,%" PRIu64 "\n", walks);
+            if(psc_accesses > 0){
+                double psc_miss_rate = (static_cast<double>(psc_misses) / static_cast<double>(psc_accesses)) * 100.0;
+                fprintf(csv_fp, "proposed_PSC_miss_rate_pct,%.2f\n", psc_miss_rate);
+                fprintf(csv_fp, "proposed_PSC_misses,%" PRIu64 "\n", psc_misses);
+                fprintf(csv_fp, "proposed_PSC_accesses,%" PRIu64 "\n", psc_accesses);
+                UInt64 total_miss_cycles = 0;
+                for (UInt64 level_cycles : psc_miss_latency_total_cycles)
+                    total_miss_cycles += level_cycles;
+                for (int lvl = 0; lvl < stats_radix.number_of_levels; ++lvl){
+                    fprintf(csv_fp, "proposed_PSC_L%d_hits,%" PRIu64 "\n", lvl + 1, psc_hits_per_level[lvl]);
+                    fprintf(csv_fp, "proposed_PSC_L%d_misses,%" PRIu64 "\n", lvl + 1, psc_misses_per_level[lvl]);
+                    double avg_miss_latency = psc_misses_per_level[lvl]
+                        ? static_cast<double>(psc_miss_latency_total_cycles[lvl]) / static_cast<double>(psc_misses_per_level[lvl])
+                        : 0.0;
+                    double miss_share = total_miss_cycles
+                        ? static_cast<double>(psc_miss_latency_total_cycles[lvl]) / static_cast<double>(total_miss_cycles) * 100.0
+                        : 0.0;
+                    fprintf(csv_fp, "proposed_PSC_L%d_avg_miss_latency_cycles,%.2f\n", lvl + 1, avg_miss_latency);
+                    fprintf(csv_fp, "proposed_PSC_L%d_miss_latency_share_pct,%.2f\n", lvl + 1, miss_share);
+                    String label = String(("proposed_PSC_L" + std::to_string(lvl + 1) + "_miss_latency_cycles").c_str());
+                    psc_miss_latency_histograms[lvl].printCsv(csv_fp, label.c_str());
+                    std::vector<std::pair<std::string, UInt64>> hitwhere_entries;
+                    for (int where = 0; where < HitWhere::NUM_HITWHERES; ++where){
+                        UInt64 count = psc_miss_hit_where_counts[lvl][where];
+                        if(!count)
+                            continue;
+                        hitwhere_entries.emplace_back(HitWhereString(static_cast<HitWhere::where_t>(where)), count);
+                    }
+                    if(!hitwhere_entries.empty()){
+                        String hitwhere_label = String(("proposed_PSC_L" + std::to_string(lvl + 1) + "_miss_hitwhere").c_str());
+                        printCsvLabeledCounts(csv_fp, hitwhere_label.c_str(), hitwhere_entries);
+                    }
+                }
+            }
+            if(!psc_combination_hitwhere_counts.empty()){
+                fprintf(csv_fp, "proposed_PSC_combo_hitwhere,combo,None");
+                for (int where = 0; where < HitWhere::NUM_HITWHERES; ++where)
+                    fprintf(csv_fp, ",%s", HitWhereString(static_cast<HitWhere::where_t>(where)));
+                fprintf(csv_fp, "\n");
+                for (const auto &entry : psc_combination_hitwhere_counts){
+                    fprintf(csv_fp, "proposed_PSC_combo_hitwhere,%s", entry.first.c_str());
+                    fprintf(csv_fp, ",%" PRIu64, entry.second[HitWhere::NUM_HITWHERES]);
+                    for (int where = 0; where < HitWhere::NUM_HITWHERES; ++where)
+                        fprintf(csv_fp, ",%" PRIu64, entry.second[where]);
+                    fprintf(csv_fp, "\n");
+                }
+            }
+            if(!psc_miss_hitwhere_pair_counts.empty()){
+                std::vector<std::pair<std::string, UInt64>> pair_entries;
+                pair_entries.reserve(psc_miss_hitwhere_pair_counts.size());
+                for (const auto &entry : psc_miss_hitwhere_pair_counts)
+                    pair_entries.emplace_back(entry.first, entry.second);
+                printCsvLabeledCounts(csv_fp, "proposed_PSC_miss_hitwhere_pairs", pair_entries);
+            }
+            if(!traversal_path_counts.empty()){
+                std::vector<std::pair<std::string, UInt64>> path_entries;
+                path_entries.reserve(traversal_path_counts.size());
+                for(const auto &entry : traversal_path_counts)
+                    path_entries.emplace_back(entry.first, entry.second);
+                printCsvLabeledCounts(csv_fp, "proposed_PTW_traversal_paths", path_entries);
+            }
+            stlb_miss_latency_histogram.printCsv(csv_fp, "proposed_TLB_miss_service_latency_cycles");
+            double total_ns = static_cast<double>(total_walk_latency.getNS());
+            if(total_ns > 0){
+                double ptb_share = static_cast<double>(total_ptb_latency.getNS()) / total_ns * 100.0;
+                fprintf(csv_fp, "proposed_PTB_latency_share_pct,%.2f\n", ptb_share);
+            }
+            fclose(csv_fp);
         }
     }
 
