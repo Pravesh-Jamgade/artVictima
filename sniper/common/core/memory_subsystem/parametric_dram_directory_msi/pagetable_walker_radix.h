@@ -31,12 +31,14 @@ namespace ParametricDramDirectoryMSI{
         std::array<UInt64, kBuckets> buckets;
         std::array<uint64_t, TAIL_BINS> tail_bins{};
         UInt64 total;
+        UInt64 sum;
         UInt64 min;
         UInt64 max;
-        ProposedHistogram() : total(0), min(0), max(0) { buckets.fill(0); }
+        ProposedHistogram() : total(0), sum(0), min(0), max(0) { buckets.fill(0); }
         void update(UInt64 value);
         void print(FILE *fp, const char *label, int width = 40) const;
         void printCsv(FILE *fp, const char *metric_name) const;
+        double average() const;
     };
 
     class PageTableWalkerRadix: public PageTableWalker{
@@ -66,6 +68,7 @@ namespace ParametricDramDirectoryMSI{
             std::vector<UInt64> psc_hits_per_level;
             std::vector<UInt64> psc_misses_per_level;
             std::vector<ProposedHistogram> psc_miss_latency_histograms;
+            std::vector<UInt64> psc_miss_latency_total_cycles;
             std::vector<std::array<UInt64, HitWhere::NUM_HITWHERES>> psc_miss_hit_where_counts;
             std::vector<UInt64> rob_stall_psc_level_cycles;
             ProposedHistogram stlb_miss_latency_histogram;
@@ -74,10 +77,14 @@ namespace ParametricDramDirectoryMSI{
             UInt64 psc_misses;
             std::map<std::string, UInt64> traversal_path_counts;
             UInt64 traversal_paths_unique_count;
+            std::map<std::string, std::array<UInt64, HitWhere::NUM_HITWHERES + 1>> psc_combination_hitwhere_counts;
+            std::map<std::string, UInt64> psc_miss_hitwhere_pair_counts;
+            int last_psc_miss_level_index;
+            HitWhere::where_t last_psc_miss_hitwhere;
             SubsecondTime total_walk_latency;
             SubsecondTime total_ptb_latency;
             SubsecondTime init_walk(IntPtr eip, IntPtr address, UtopiaCache* shadow_cache, CacheCntlr *_cache,Core::lock_signal_t lock_signal,Byte* data_buf, UInt32 data_length,bool modeled, bool count) ;
-            SubsecondTime InitializeWalkRecursive(IntPtr eip, IntPtr address,int level,ptw_table* new_table,Core::lock_signal_t lock_signal,Byte* data_buf, UInt32 data_length,bool modeled, bool count, std::string &traversal_path, bool allow_psc_lookup);
+            SubsecondTime InitializeWalkRecursive(IntPtr eip, IntPtr address,int level,ptw_table* new_table,Core::lock_signal_t lock_signal,Byte* data_buf, UInt32 data_length,bool modeled, bool count, std::string &traversal_path, bool allow_psc_lookup, struct PscCombinationState *psc_state);
             int init_walk_functional(IntPtr address);
             int init_walk_recursive_functional(IntPtr address,int level,ptw_table* new_table);
             bool isPageFault(IntPtr address);
@@ -85,9 +92,18 @@ namespace ParametricDramDirectoryMSI{
             std::vector<IntPtr> getAddresses(){return addresses;}
             ~PageTableWalkerRadix();
         private:
+            struct PscCombinationState{
+                std::vector<char> outcomes;
+                int miss_hitwhere;
+                bool any_miss;
+                PscCombinationState(size_t levels)
+                    : outcomes(levels, '?'), miss_hitwhere(HitWhere::NUM_HITWHERES), any_miss(false) {}
+            };
             std::vector<uint64_t> computeVpnIndices(uint64_t address);
             ptw_table* resolveTableForLevel(const std::vector<uint64_t> &vpn_indices, int target_level);
             void recordLevelStats(int level_index, SubsecondTime latency, HitWhere::where_t *hit_where = NULL);
+            void recordPscMiss(int level_index, SubsecondTime latency, HitWhere::where_t hit_where);
+            void updatePscCombinationState(PscCombinationState *psc_state, int level_index, bool hit, HitWhere::where_t hit_where, bool has_hitwhere);
     };
 
     }
