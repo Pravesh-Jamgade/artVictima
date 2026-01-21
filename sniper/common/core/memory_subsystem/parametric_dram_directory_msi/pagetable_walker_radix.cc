@@ -711,6 +711,8 @@ namespace ParametricDramDirectoryMSI{
             ? static_cast<double>(rob_stall_stlb_miss_cycles) / static_cast<double>(instruction_count)
             : 0.0;
         double cpi_on_stlb_miss = 1.0 + stall_cycles_per_instruction;
+        double avg_stall_cycles = walks ? static_cast<double>(SubsecondTime::divideRounded(total_walk_latency, period)) / walks : 0.0;
+        double cpi_on_stlb_miss = 1.0 + avg_stall_cycles;
 
         String stats_output_path = Sim()->getConfig()->formatOutputFileName("proposed.stats");
         FILE *stats_fp = fopen(stats_output_path.c_str(), "a");
