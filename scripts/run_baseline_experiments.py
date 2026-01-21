@@ -27,61 +27,67 @@ SNIPER_COMMAND = "/app/sniper/run-sniper -s stop-by-icount:500000000 --genstats 
 
 EXPERIMENT_CONFIGS = {
      "baseline": {
-        "config": "/app/sniper/config/virtual_memory/radix.cfg",
+        "config": "/app/sniper/config/virtual_memory_configs/radix.cfg",
         "label": "baseline",
     },
+
+    "perfect": {
+        "config": "/app/sniper/config/virtual_memory_configs/perfecttlb.cfg",
+        "label": "perfect",
+    },
+
     # "baseline-virtualized": {
-    #     "config": "/app/sniper/config/virtual_memory/virtualized.cfg",
+    #     "config": "/app/sniper/config/virtual_memory_configs/virtualized.cfg",
     #     "label": "baseline_virtual",
     # },
     "ptb": {
-        "config": "/app/sniper/config/virtual_memory/ptb.cfg",
+        "config": "/app/sniper/config/virtual_memory_configs/ptb.cfg",
         "label": "ptb",
     },
     "ptb-pd": {
-        "config": "/app/sniper/config/virtual_memory/ptbpd.cfg",
+        "config": "/app/sniper/config/virtual_memory_configs/ptbpd.cfg",
         "label": "ptb-pd",
     },
     # "ptb-virtualized": {
-    #     "config": "/app/sniper/config/virtual_memory/ptb_virtual.cfg",
+    #     "config": "/app/sniper/config/virtual_memory_configs/ptb_virtual.cfg",
     #     "label": "ptb_virtual",
     # },
 
     "victima": {
-        "config": "/app/sniper/config/virtual_memory/victima.cfg",
+        "config": "/app/sniper/config/virtual_memory_configs/victima.cfg",
         "label": "victima",
     },
 
     "utopia": {
-        "config": "/app/sniper/config/virtual_memory/utopia.cfg",
+        "config": "/app/sniper/config/virtual_memory_configs/utopia.cfg",
         "label": "utopia",
     },
 
     "potm": {
-        "config": "/app/sniper/config/virtual_memory/potm.cfg",
+        "config": "/app/sniper/config/virtual_memory_configs/potm.cfg",
         "label": "potm",
     },
 
     # "victima-virtualized": {
-    #     "config": "/app/sniper/config/virtual_memory/victima_virtual.cfg",
+    #     "config": "/app/sniper/config/virtual_memory_configs/victima_virtual.cfg",
     #     "label": "victima_virtual",
     # },
 }
 
 # "baseline": {
-#         "config": "/app/sniper/config/virtual_memory_multicore/radix.cfg",
+#         "config": "/app/sniper/config/virtual_memory_configs_multicore/radix.cfg",
 #         "label": "baseline",
 #     },
 #     "baseline-virtualized": {
-#         "config": "/app/sniper/config/virtual_memory_multicore/radix_virtual.cfg",
+#         "config": "/app/sniper/config/virtual_memory_configs_multicore/radix_virtual.cfg",
 #         "label": "baseline_virtual",
 #     },
 #     "ptb": {
-#         "config": "/app/sniper/config/virtual_memory_multicore/ptb.cfg",
+#         "config": "/app/sniper/config/virtual_memory_configs_multicore/ptb.cfg",
 #         "label": "ptb",
 #     },
 #     "ptb-virtualized": {
-#         "config": "/app/sniper/config/virtual_memory_multicore/ptb_virtual.cfg",
+#         "config": "/app/sniper/config/virtual_memory_configs_multicore/ptb_virtual.cfg",
 #         "label": "ptb_virtual",
 #     },
 
@@ -132,6 +138,13 @@ def build_parser():
         default="./baseline_jobfile.sh",
         help="Path to the generated jobfile script.",
     )
+
+    parser.add_argument(
+        "--joblist",
+        default="./joblist.txt",
+        help="Path to the generated joblist file.",
+    )
+
     parser.add_argument(
         "--mode",
         choices=["native", "slurm"],
@@ -182,6 +195,7 @@ def csv_choices(value_string):
         "victima-virtualized",
         "utopia",
         "potm",
+        "perfect",
         "custom",
     ]
     values = [v.strip() for v in value_string.split(",")]
@@ -282,6 +296,14 @@ def build_commands(args: argparse.Namespace) -> List[Tuple[str, str]]:
 def write_jobfile(args: argparse.Namespace, commands: List[Tuple[str, str]]):
     jobfile_path = Path(args.jobfile)
     jobfile_path.parent.mkdir(parents=True, exist_ok=True)
+
+    joblistfile_path = Path(args.joblist)
+
+    with open(joblistfile_path, "w", encoding="utf-8") as jobfile:
+        for cmd, job_label in commands:
+            jobfile.write(f"LABEL={job_label}\n")
+            jobfile.write(f"CMD={cmd}\n")
+            jobfile.write("\n")
 
     with open(jobfile_path, "w", encoding="utf-8") as jobfile:
         jobfile.write("#!/bin/bash\n\n")

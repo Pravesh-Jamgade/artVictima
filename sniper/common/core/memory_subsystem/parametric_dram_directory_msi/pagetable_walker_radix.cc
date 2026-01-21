@@ -32,6 +32,11 @@ namespace ParametricDramDirectoryMSI{
             min = std::min(min, value);
             max = std::max(max, value);
         }
+
+         // tail zoom bins
+        if (value >= TAIL_START && value < TAIL_END) {
+            tail_bins[(value - TAIL_START) / TAIL_W]++;
+        }
     }
 
     void ProposedHistogram::print(FILE *fp, const char *label, int width) const{
@@ -91,6 +96,26 @@ namespace ParametricDramDirectoryMSI{
         for (const auto &entry : entries)
             fprintf(fp, ",%" PRIu64, entry.second);
         fprintf(fp, "\n");
+
+        // tail latencies
+        entries.clear();
+        for (size_t i = 0; i < TAIL_BINS; ++i) {
+            UInt64 count = tail_bins[i];
+            UInt64 range_start = TAIL_START + i * TAIL_W;
+            UInt64 range_end = range_start + TAIL_W - 1;
+            std::ostringstream label;
+            label << "[" << range_start << ".." << range_end << "]";
+            entries.emplace_back(label.str(), count);
+        }
+
+        fprintf(fp, "%s_tail", metric_name);
+        for (const auto &entry : entries)
+            fprintf(fp, ",%s", entry.first.c_str());
+        fprintf(fp, "\n");
+        fprintf(fp, "%s_tail", metric_name);
+        for (const auto &entry : entries)
+            fprintf(fp, ",%" PRIu64, entry.second);
+        fprintf(fp, "\n"); 
     }
 
     namespace {

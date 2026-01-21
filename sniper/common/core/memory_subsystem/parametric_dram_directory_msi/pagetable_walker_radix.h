@@ -19,11 +19,17 @@
 #include <map>
 
 
-    namespace ParametricDramDirectoryMSI{
+namespace ParametricDramDirectoryMSI{
+
+    static constexpr uint64_t TAIL_START = 128;
+    static constexpr uint64_t TAIL_END   = 2048;   // exclusive
+    static constexpr uint64_t TAIL_W     = 32;
+    static constexpr uint64_t TAIL_BINS  = (TAIL_END - TAIL_START) / TAIL_W; 
 
     struct ProposedHistogram{
         static const int kBuckets = 20;
         std::array<UInt64, kBuckets> buckets;
+        std::array<uint64_t, TAIL_BINS> tail_bins{};
         UInt64 total;
         UInt64 min;
         UInt64 max;
