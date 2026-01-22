@@ -251,15 +251,27 @@ namespace ParametricDramDirectoryMSI{
                 }
                 if(!complete)
                     return;
+                // C++11 COMPATIBLE VERSION
                 std::string key(psc_state.outcomes.begin(), psc_state.outcomes.end());
-                auto [it, inserted] = psc_combination_hitwhere_counts.emplace(
+
+                // Emplace returns a std::pair<iterator, bool> in C++11
+                auto emplace_result = psc_combination_hitwhere_counts.emplace(
                     key, std::array<UInt64, HitWhere::NUM_HITWHERES + 1>{});
+
+                // Extract the iterator and the boolean flag manually from the pair
+                auto it = emplace_result.first;
+                bool inserted = emplace_result.second;
+
                 auto &counts = it->second;
-                if(inserted)
+                if(inserted) {
                     counts.fill(0);
+                }
+
                 size_t index = psc_state.any_miss ? static_cast<size_t>(psc_state.miss_hitwhere) : HitWhere::NUM_HITWHERES;
-                if(index < counts.size())
+
+                if(index < counts.size()) {
                     counts[index]++;
+                }
             };
             // Pravesh:1 Track ROB stall cycles for STLB-miss translation, and split by PSC level.
             auto record_rob_stall_cycles = [&](SubsecondTime latency) {
@@ -425,7 +437,7 @@ namespace ParametricDramDirectoryMSI{
 
     }
 
-    SubsecondTime PageTableWalkerRadix::InitializeWalkRecursive(IntPtr eip, uint64_t address,
+    SubsecondTime PageTableWalkerRadix::InitializeWalkRecursive(IntPtr eip, IntPtr address,
         int level,ptw_table* new_table,
         Core::lock_signal_t lock_signal,
         Byte* data_buf, UInt32 data_length,
@@ -535,7 +547,7 @@ namespace ParametricDramDirectoryMSI{
                 ptw_table* leaf_table = new_table->entries[a1].next_level_table;
                 IntPtr leaf_address = ((IntPtr)(&leaf_table->entries[leaf_index])) & (~((64 - 1)));
                 SubsecondTime prefetch_time = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
-                cache->processMemOpFromCore(
+                HitWhere::where_t res = cache->processMemOpFromCore(
                     eip,
                     lock_signal,
                     Core::mem_op_t::READ,
@@ -544,6 +556,10 @@ namespace ParametricDramDirectoryMSI{
                     true,
                     false, CacheBlockInfo::block_type_t::PAGE_TABLE, SubsecondTime::Zero());
                 pwc->lookup(leaf_address, prefetch_time, true, level + 1, false);
+
+                uint64_t delta = SubsecondTime::divideRounded(getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD) - prefetch_time, core->getDvfsDomain()->getPeriod());
+                prefeth_latency[res].update(delta);
+
                 m_shmem_perf_model->setElapsedTime(ShmemPerfModel::_USER_THREAD, prefetch_time);
             }
 
@@ -737,7 +753,6 @@ namespace ParametricDramDirectoryMSI{
             : 0.0;
         double cpi_on_stlb_miss = 1.0 + stall_cycles_per_instruction;
         double avg_stall_cycles = walks ? static_cast<double>(SubsecondTime::divideRounded(total_walk_latency, period)) / walks : 0.0;
-        double cpi_on_stlb_miss = 1.0 + avg_stall_cycles;
 
         String stats_output_path = Sim()->getConfig()->formatOutputFileName("proposed.stats");
         FILE *stats_fp = fopen(stats_output_path.c_str(), "a");
@@ -818,6 +833,7 @@ namespace ParametricDramDirectoryMSI{
         if(csv_fp){
             fprintf(csv_fp, "proposed_STLB_miss_CPI,%.4f\n", cpi_on_stlb_miss);
             fprintf(csv_fp, "proposed_STLB_miss_stall_cycles_per_instruction,%.6f\n", stall_cycles_per_instruction);
+            fprintf(csv_fp, "proposed_STLB_miss_avg_stall_cycles,%.6f\n", avg_stall_cycles);
             fprintf(csv_fp, "proposed_STLB_miss_instruction_count,%" PRIu64 "\n", instruction_count);
             fprintf(csv_fp, "proposed_STLB_miss_walks,%" PRIu64 "\n", walks);
             if(psc_accesses > 0){
@@ -853,6 +869,7 @@ namespace ParametricDramDirectoryMSI{
                         printCsvLabeledCounts(csv_fp, hitwhere_label.c_str(), hitwhere_entries);
                     }
                 }
+
             }
             if(!psc_combination_hitwhere_counts.empty()){
                 fprintf(csv_fp, "proposed_PSC_combo_hitwhere,combo,None");
@@ -887,6 +904,12 @@ namespace ParametricDramDirectoryMSI{
                 double ptb_share = static_cast<double>(total_ptb_latency.getNS()) / total_ns * 100.0;
                 fprintf(csv_fp, "proposed_PTB_latency_share_pct,%.2f\n", ptb_share);
             }
+
+            for(int i=0; i< HitWhere::NUM_HITWHERES; i++){
+                String label = String(("proposed_PTB_prefetch_latency_" + std::string(HitWhereString(static_cast<HitWhere::where_t>(i)))).c_str());
+                prefeth_latency[static_cast<HitWhere::where_t>(i)].printCsv(csv_fp, label.c_str());
+            }// 
+
             fclose(csv_fp);
         }
     }
