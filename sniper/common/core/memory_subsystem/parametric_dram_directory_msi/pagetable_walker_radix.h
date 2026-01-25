@@ -87,6 +87,7 @@ namespace ParametricDramDirectoryMSI{
             UInt64 overlap_samples;
             UInt64 overlap_ready;
             UInt64 overlap_ratio_sum_milli;
+            bool early_fetch_enabled;
             UInt64 rob_stall_stlb_miss_cycles;
             UInt64 psc_accesses;
             UInt64 psc_misses;

@@ -220,6 +220,7 @@ namespace ParametricDramDirectoryMSI{
         last_psc_miss_hitwhere = HitWhere::where_t();
         total_walk_latency = SubsecondTime::Zero();
         total_ptb_latency = SubsecondTime::Zero();
+        early_fetch_enabled = Sim()->getCfg()->getBoolDefault("perf_model/ptb/early_fetch", false);
         overlap_samples = 0;
         overlap_ready = 0;
         overlap_ratio_sum_milli = 0;
@@ -490,6 +491,7 @@ namespace ParametricDramDirectoryMSI{
             IntPtr pwc_address;
             SubsecondTime t_start;
             SubsecondTime total_latency;
+            HitWhere::where_t pd_hit_where = HitWhere::UNKNOWN;
             
             for (int i = stats_radix.number_of_levels; i >= level; i--)
             {
@@ -577,6 +579,8 @@ namespace ParametricDramDirectoryMSI{
 
                     mem_manager->tagCachesBlockType(cache_address,CacheBlockInfo::block_type_t::PAGE_TABLE);
                     recordLevelStats(level-1, total_latency, &hit_where);
+                    if(level_index == stats_radix.number_of_levels - 2)
+                        pd_hit_where = hit_where;
                     if(page_walk_cache_enabled && count){
                         recordPscMiss(level_index, total_latency, hit_where);
                     }
@@ -599,21 +603,54 @@ namespace ParametricDramDirectoryMSI{
                 return total_latency;
             }
             
-            bool ptb_pd_mode = ptb && ptb->getMode() == PageTableBuffer::Mode::PD;
-            bool pd_level = ptb_pd_mode && (level_index == stats_radix.number_of_levels - 2);
-            bool pd_psc_miss = pd_level && page_walk_cache_enabled && allow_psc_lookup && !pwc_hit;
+            bool pd_level = (level_index == stats_radix.number_of_levels - 2);
+            bool pd_psc_miss = early_fetch_enabled && pd_level && !pwc_hit;
 
             // Prefetch the leaf PTE after a PD-level PSC miss (hit or page-fault path).
             if (pd_psc_miss
                 && new_table->entries[a1].entry_type == ptw_table_entry_type::PTW_TABLE_POINTER
                 && new_table->entries[a1].next_level_table)
             {
+                CacheCntlr* prefetch_cache = cache;
+                if(mem_manager){
+                    switch (pd_hit_where){
+                        case HitWhere::L1_OWN:
+                            prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::L1_DCACHE);
+                            break;
+                        case HitWhere::L2_OWN:
+                            prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::L2_CACHE);
+                            break;
+                        case HitWhere::L3_OWN:
+                            prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::L3_CACHE);
+                            break;
+                        case HitWhere::L4_OWN:
+                            prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::L4_CACHE);
+                            break;
+                        case HitWhere::DRAM:
+                        case HitWhere::DRAM_LOCAL:
+                        case HitWhere::DRAM_REMOTE:
+                        case HitWhere::DRAM_CACHE:
+                        case HitWhere::MISS:
+                        case HitWhere::NUCA_CACHE:
+                        case HitWhere::CACHE_REMOTE:
+                        case HitWhere::SIBLING:
+                        case HitWhere::L1_SIBLING:
+                        case HitWhere::L2_SIBLING:
+                        case HitWhere::L3_SIBLING:
+                        case HitWhere::L4_SIBLING:
+                        default:
+                            prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::LAST_LEVEL_CACHE);
+                            break;
+                    }
+                }
+                if(!prefetch_cache)
+                    prefetch_cache = cache;
                 std::vector<uint64_t> vpn_indices = computeVpnIndices(address);
                 uint64_t leaf_index = vpn_indices.back();
                 ptw_table* leaf_table = new_table->entries[a1].next_level_table;
                 IntPtr leaf_address = ((IntPtr)(&leaf_table->entries[leaf_index])) & (~((64 - 1)));
                 SubsecondTime prefetch_time = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
-                HitWhere::where_t res = cache->processMemOpFromCore(
+                HitWhere::where_t res = prefetch_cache->processMemOpFromCore(
                     eip,
                     lock_signal,
                     Core::mem_op_t::READ,
