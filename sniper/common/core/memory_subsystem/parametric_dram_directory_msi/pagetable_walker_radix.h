@@ -38,6 +38,7 @@ namespace ParametricDramDirectoryMSI{
         void update(UInt64 value);
         void print(FILE *fp, const char *label, int width = 40) const;
         void printCsv(FILE *fp, const char *metric_name) const;
+        void printCsvCdf(FILE *fp, const char *metric_name) const;
         double average() const;
     };
 
@@ -81,6 +82,12 @@ namespace ParametricDramDirectoryMSI{
             std::vector<UInt64> rob_stall_psc_level_cycles;
             ProposedHistogram stlb_miss_latency_histogram;
             std::unordered_map<HitWhere::where_t, ProposedHistogram> prefeth_latency;
+            ProposedHistogram overlap_ratio_histogram;
+            ProposedHistogram overlap_tail_latency_histogram;
+            UInt64 overlap_samples;
+            UInt64 overlap_ready;
+            UInt64 overlap_ratio_sum_milli;
+            bool early_fetch_enabled;
             UInt64 rob_stall_stlb_miss_cycles;
             UInt64 psc_accesses;
             UInt64 psc_misses;
@@ -92,6 +99,13 @@ namespace ParametricDramDirectoryMSI{
             HitWhere::where_t last_psc_miss_hitwhere;
             SubsecondTime total_walk_latency;
             SubsecondTime total_ptb_latency;
+            struct OverlapPrefetchState{
+                bool valid;
+                IntPtr leaf_cache_line;
+                SubsecondTime t_issue;
+                SubsecondTime t_done;
+            };
+            OverlapPrefetchState overlap_prefetch_state;
             SubsecondTime init_walk(IntPtr eip, IntPtr address, UtopiaCache* shadow_cache, CacheCntlr *_cache,Core::lock_signal_t lock_signal,Byte* data_buf, UInt32 data_length,bool modeled, bool count) ;
             SubsecondTime InitializeWalkRecursive(IntPtr eip, IntPtr address,int level,ptw_table* new_table,Core::lock_signal_t lock_signal,Byte* data_buf, UInt32 data_length,bool modeled, bool count, std::string &traversal_path, bool allow_psc_lookup, PscCombinationState *psc_state);
             int init_walk_functional(IntPtr address);
