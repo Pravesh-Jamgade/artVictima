@@ -124,6 +124,43 @@ namespace ParametricDramDirectoryMSI{
         fprintf(fp, "\n"); 
     }
 
+    void ProposedHistogram::printCsvCdf(FILE *fp, const char *metric_name) const{
+        if(!fp || total == 0)
+            return;
+        printCsv(fp, metric_name);
+        std::vector<std::pair<std::string, UInt64>> entries;
+        entries.reserve(kBuckets);
+        for (int idx = 0; idx < kBuckets; ++idx){
+            UInt64 count = buckets[idx];
+            if(!count)
+                continue;
+            UInt64 range_start = (idx == 0) ? 0 : (UInt64(1) << idx);
+            std::ostringstream label;
+            label << "[" << range_start << "..";
+            if(idx + 1 < kBuckets){
+                UInt64 range_end = (UInt64(1) << (idx + 1)) - 1;
+                label << range_end << "]";
+            } else {
+                label << "inf]";
+            }
+            entries.emplace_back(label.str(), count);
+        }
+        if(entries.empty())
+            return;
+        fprintf(fp, "%s_cdf", metric_name);
+        for (const auto &entry : entries)
+            fprintf(fp, ",%s", entry.first.c_str());
+        fprintf(fp, "\n");
+        fprintf(fp, "%s_cdf", metric_name);
+        UInt64 cumulative = 0;
+        for (const auto &entry : entries){
+            cumulative += entry.second;
+            double pct = static_cast<double>(cumulative) / static_cast<double>(total) * 100.0;
+            fprintf(fp, ",%.2f", pct);
+        }
+        fprintf(fp, "\n");
+    }
+
     namespace {
         void printCsvLabeledCounts(FILE *fp, const char *metric_name, const std::vector<std::pair<std::string, UInt64>> &entries){
             if(!fp || entries.empty())
@@ -183,6 +220,10 @@ namespace ParametricDramDirectoryMSI{
         last_psc_miss_hitwhere = HitWhere::where_t();
         total_walk_latency = SubsecondTime::Zero();
         total_ptb_latency = SubsecondTime::Zero();
+        overlap_samples = 0;
+        overlap_ready = 0;
+        overlap_ratio_sum_milli = 0;
+        overlap_prefetch_state = {false, 0, SubsecondTime::Zero(), SubsecondTime::Zero()};
         name = "ptw_radix_";
         name = name + std::to_string(counter).c_str();
         for (int i = 0; i < number_of_levels; i++){
@@ -225,6 +266,7 @@ namespace ParametricDramDirectoryMSI{
             addresses.clear();
             cache = _cache;
             stats.page_walks++;
+            overlap_prefetch_state.valid = false;
 
             std::vector<uint64_t> vpn_indices = computeVpnIndices(address);
 
@@ -490,6 +532,30 @@ namespace ParametricDramDirectoryMSI{
                     t_start = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
                     
                     IntPtr cache_address = ((IntPtr)(&new_table->entries[a1])) & (~((64 - 1))); 
+                    if(count && overlap_prefetch_state.valid
+                        && level == stats_radix.number_of_levels
+                        && cache_address == overlap_prefetch_state.leaf_cache_line){
+                        SubsecondTime t_need = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
+                        SubsecondTime t_issue = overlap_prefetch_state.t_issue;
+                        SubsecondTime t_done = overlap_prefetch_state.t_done;
+                        UInt64 pte_cycles = (t_done > t_issue)
+                            ? SubsecondTime::divideRounded(t_done - t_issue, core->getDvfsDomain()->getPeriod())
+                            : 0;
+                        if(pte_cycles > 0){
+                            UInt64 tail_cycles = (t_done > t_need)
+                                ? SubsecondTime::divideRounded(t_done - t_need, core->getDvfsDomain()->getPeriod())
+                                : 0;
+                            UInt64 overlap_cycles = (pte_cycles > tail_cycles) ? (pte_cycles - tail_cycles) : 0;
+                            UInt64 ratio_milli = static_cast<UInt64>((overlap_cycles * 1000ULL) / pte_cycles);
+                            overlap_ratio_histogram.update(ratio_milli);
+                            overlap_tail_latency_histogram.update(tail_cycles);
+                            overlap_ratio_sum_milli += ratio_milli;
+                            overlap_samples++;
+                            if(t_done <= t_need)
+                                overlap_ready++;
+                        }
+                        overlap_prefetch_state.valid = false;
+                    }
 
                     HitWhere::where_t hit_where = cache->processMemOpFromCore(
                         eip,
@@ -557,8 +623,15 @@ namespace ParametricDramDirectoryMSI{
                     false, CacheBlockInfo::block_type_t::PAGE_TABLE, SubsecondTime::Zero());
                 pwc->lookup(leaf_address, prefetch_time, true, level + 1, false);
 
-                uint64_t delta = SubsecondTime::divideRounded(getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD) - prefetch_time, core->getDvfsDomain()->getPeriod());
+                SubsecondTime prefetch_done = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
+                uint64_t delta = SubsecondTime::divideRounded(prefetch_done - prefetch_time, core->getDvfsDomain()->getPeriod());
                 prefeth_latency[res].update(delta);
+                if(count){
+                    overlap_prefetch_state.valid = true;
+                    overlap_prefetch_state.leaf_cache_line = leaf_address;
+                    overlap_prefetch_state.t_issue = prefetch_time;
+                    overlap_prefetch_state.t_done = prefetch_done;
+                }
 
                 m_shmem_perf_model->setElapsedTime(ShmemPerfModel::_USER_THREAD, prefetch_time);
             }
@@ -825,6 +898,14 @@ namespace ParametricDramDirectoryMSI{
                 double ptb_share = static_cast<double>(total_ptb_latency.getNS()) / total_ns * 100.0;
                 fprintf(stats_fp, "[Core %d] proposed PTB latency share: %.2f%%\n", core_id, ptb_share);
             }
+            if(overlap_samples > 0){
+                double avg_overlap_ratio = static_cast<double>(overlap_ratio_sum_milli) / static_cast<double>(overlap_samples) / 1000.0;
+                double overlap_ready_pct = static_cast<double>(overlap_ready) / static_cast<double>(overlap_samples) * 100.0;
+                fprintf(stats_fp, "[Core %d] proposed PTB overlap ratio avg: %.4f (samples %" PRIu64 ")\n",
+                        core_id, avg_overlap_ratio, overlap_samples);
+                fprintf(stats_fp, "[Core %d] proposed PTB overlap ready rate: %.2f%% (%" PRIu64 "/%" PRIu64 ")\n",
+                        core_id, overlap_ready_pct, overlap_ready, overlap_samples);
+            }
             fclose(stats_fp);
         }
 
@@ -903,6 +984,16 @@ namespace ParametricDramDirectoryMSI{
             if(total_ns > 0){
                 double ptb_share = static_cast<double>(total_ptb_latency.getNS()) / total_ns * 100.0;
                 fprintf(csv_fp, "proposed_PTB_latency_share_pct,%.2f\n", ptb_share);
+            }
+            if(overlap_samples > 0){
+                double avg_overlap_ratio = static_cast<double>(overlap_ratio_sum_milli) / static_cast<double>(overlap_samples) / 1000.0;
+                double overlap_ready_pct = static_cast<double>(overlap_ready) / static_cast<double>(overlap_samples) * 100.0;
+                fprintf(csv_fp, "proposed_PTB_overlap_samples,%" PRIu64 "\n", overlap_samples);
+                fprintf(csv_fp, "proposed_PTB_overlap_successes,%" PRIu64 "\n", overlap_ready);
+                fprintf(csv_fp, "proposed_PTB_overlap_success_rate_pct,%.2f\n", overlap_ready_pct);
+                fprintf(csv_fp, "proposed_PTB_overlap_ratio_avg,%.4f\n", avg_overlap_ratio);
+                overlap_ratio_histogram.printCsvCdf(csv_fp, "proposed_PTB_overlap_ratio_milli");
+                overlap_tail_latency_histogram.printCsv(csv_fp, "proposed_PTB_overlap_tail_latency_cycles");
             }
 
             for(int i=0; i< HitWhere::NUM_HITWHERES; i++){

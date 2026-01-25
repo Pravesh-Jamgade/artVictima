@@ -257,6 +257,40 @@ if(!oracle_protection_enabled){
            </div>
         </div>
 
+        <div class="snippet-container">
+
+            <button type="button" class="collapsible">Overlap effectiveness stats (your main contribution)</button>
+            <div class="content">
+                <p>This bucket measures how effective early fetch is at hiding page-table-walk latency. We define three timestamps per walk:</p>
+                <ul>
+                    <li><strong>t_issue</strong>: time when the early fetch is launched (at the PD service).</li>
+                    <li><strong>t_done</strong>: completion time for the modeled walk (the point where it would have blocked).</li>
+                    <li><strong>t_need</strong>: dependency time (when the leaf result is required).</li>
+                </ul>
+                <p>Using those timestamps, compute:</p>
+                <ul>
+                    <li><strong>L_pte</strong> = t_done - t_issue</li>
+                    <li><strong>L_tail</strong> = max(0, t_done - t_need)</li>
+                    <li><strong>L_overlap</strong> = L_pte - L_tail</li>
+                    <li><strong>overlap_ratio</strong> = L_overlap / L_pte</li>
+                </ul>
+                <p>Report the following aggregate views:</p>
+                <ul>
+                    <li>Average overlap ratio.</li>
+                    <li>Histogram/CDF of overlap ratio.</li>
+                    <li>Histogram of tail latency (L_tail), which directly shows “how often we still waited”.</li>
+                    <li><strong>Early-fetch success rate</strong>: P(t_done &lt;= t_need), or the percent of times the early fetch was ready by the need time.</li>
+                </ul>
+                <p><strong>Implementation note (how to collect overlap stats):</strong></p>
+                <ul>
+                    <li>Record <strong>t_issue</strong> and <strong>t_done</strong> when A fires.</li>
+                    <li>Record <strong>t_need</strong> right before B.</li>
+                    <li>Compute <strong>L_overlap</strong> and <strong>L_tail</strong> per walk.</li>
+                    <li>Accumulate histograms across walks.</li>
+                </ul>
+            </div>
+        </div>
+
 
 
 
