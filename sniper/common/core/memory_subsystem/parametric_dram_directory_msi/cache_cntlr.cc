@@ -888,15 +888,40 @@ CacheCntlr::trainPrefetcher(IntPtr eip, IntPtr address, Core::mem_op_t mem_op_ty
          if (m_master->m_prefetch_list.size() > PREFETCH_MAX_QUEUE_LENGTH)
             break;
          if (!operationPermissibleinCache(*it, Core::READ))
-            m_master->m_prefetch_list.push_back(*it);
+            m_master->m_prefetch_list.push_back(CacheMasterCntlr::PrefetchEntry{*it, CacheBlockInfo::block_type_t::NON_PAGE_TABLE});
       }
    }
 }
 
-void
+bool
+CacheCntlr::queuePrefetchAddress(IntPtr address, CacheBlockInfo::block_type_t block_type, SubsecondTime t_issue, bool *queue_was_empty)
+{
+   ScopedLock sl(getLock());
+   if (m_master->m_prefetch_list.size() > PREFETCH_MAX_QUEUE_LENGTH)
+      return false;
+   if (operationPermissibleinCache(address, Core::READ))
+      return false;
+
+   if (queue_was_empty)
+      *queue_was_empty = m_master->m_prefetch_list.empty();
+
+   m_master->m_prefetch_list.push_back(CacheMasterCntlr::PrefetchEntry{address, block_type});
+   if (m_master->m_prefetch_next == SubsecondTime::Zero() || m_master->m_prefetch_next > t_issue)
+      m_master->m_prefetch_next = t_issue;
+   return true;
+}
+
+CacheCntlr::PrefetchResult
+CacheCntlr::issuePrefetchFromQueue(IntPtr eip, SubsecondTime t_now)
+{
+   return Prefetch(eip, t_now);
+}
+
+CacheCntlr::PrefetchResult
 CacheCntlr::Prefetch(IntPtr eip,SubsecondTime t_now)
 {
    IntPtr address_to_prefetch = INVALID_ADDRESS;
+   CacheBlockInfo::block_type_t block_type = CacheBlockInfo::block_type_t::NON_PAGE_TABLE;
    eip = 0xdeadbeef;
 
    {
@@ -906,13 +931,14 @@ CacheCntlr::Prefetch(IntPtr eip,SubsecondTime t_now)
       {
          while(!m_master->m_prefetch_list.empty())
          {
-            IntPtr address = m_master->m_prefetch_list.front();
+            CacheMasterCntlr::PrefetchEntry entry = m_master->m_prefetch_list.front();
             m_master->m_prefetch_list.pop_front();
 
             // Check address again, maybe some other core already brought it into the cache
-            if (!operationPermissibleinCache(address, Core::READ))
+            if (!operationPermissibleinCache(entry.address, Core::READ))
             {
-               address_to_prefetch = address;
+               address_to_prefetch = entry.address;
+               block_type = entry.block_type;
                // Do at most one prefetch now, save the rest for a future call
                break;
             }
@@ -920,26 +946,28 @@ CacheCntlr::Prefetch(IntPtr eip,SubsecondTime t_now)
       }
    }
 
+   PrefetchResult result{false, SubsecondTime::Zero(), HitWhere::UNKNOWN};
    if (address_to_prefetch != INVALID_ADDRESS)
    {
-      doPrefetch(eip, address_to_prefetch, m_master->m_prefetch_next);
+      result = doPrefetch(eip, address_to_prefetch, block_type, m_master->m_prefetch_next);
       atomic_add_subsecondtime(m_master->m_prefetch_next, PREFETCH_INTERVAL);
    }
 
    // In case the next-level cache has a prefetcher, run it
    if (m_next_cache_cntlr)
       m_next_cache_cntlr->Prefetch(eip, t_now);
+   return result;
 }
 
-void
-CacheCntlr::doPrefetch(IntPtr eip, IntPtr prefetch_address, SubsecondTime t_start)
+CacheCntlr::PrefetchResult
+CacheCntlr::doPrefetch(IntPtr eip, IntPtr prefetch_address, CacheBlockInfo::block_type_t block_type, SubsecondTime t_start)
 {
    ++stats.prefetches;
    acquireStackLock(prefetch_address);
    MYLOG("prefetching %lx", prefetch_address);
    SubsecondTime t_before = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
    getShmemPerfModel()->setElapsedTime(ShmemPerfModel::_USER_THREAD, t_start); // Start the prefetch at the same time as the original miss
-   HitWhere::where_t hit_where = processShmemReqFromPrevCache(eip, this, Core::READ, prefetch_address, true, true,CacheBlockInfo::block_type_t::NON_PAGE_TABLE, Prefetch::OWN, t_start, false, Core::mem_origin_t::NORMAL);
+   HitWhere::where_t hit_where = processShmemReqFromPrevCache(eip, this, Core::READ, prefetch_address, true, true, block_type, Prefetch::OWN, t_start, false, Core::mem_origin_t::NORMAL);
 
    if (hit_where == HitWhere::MISS)
    {
@@ -949,13 +977,15 @@ CacheCntlr::doPrefetch(IntPtr eip, IntPtr prefetch_address, SubsecondTime t_star
       waitForNetworkThread();
       wakeUpNetworkThread();
 
-      hit_where = processShmemReqFromPrevCache(eip, this, Core::READ, prefetch_address, false, false,CacheBlockInfo::block_type_t::NON_PAGE_TABLE, Prefetch::OWN, t_start, false, Core::mem_origin_t::NORMAL);
+      hit_where = processShmemReqFromPrevCache(eip, this, Core::READ, prefetch_address, false, false, block_type, Prefetch::OWN, t_start, false, Core::mem_origin_t::NORMAL);
 
       LOG_ASSERT_ERROR(hit_where != HitWhere::MISS, "Line was not there after prefetch");
    }
 
+   SubsecondTime t_done = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
    getShmemPerfModel()->setElapsedTime(ShmemPerfModel::_USER_THREAD, t_before); // Ignore changes to time made by the prefetch call
    releaseStackLock(prefetch_address);
+   return PrefetchResult{true, t_done, hit_where};
 }
 
 
