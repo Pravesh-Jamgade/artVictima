@@ -224,6 +224,7 @@ namespace ParametricDramDirectoryMSI{
         overlap_samples = 0;
         overlap_ready = 0;
         overlap_ratio_sum_milli = 0;
+        pd_prefetch_overlap_samples = 0;
         overlap_prefetch_state = {false, 0, SubsecondTime::Zero(), SubsecondTime::Zero()};
         name = "ptw_radix_";
         name = name + std::to_string(counter).c_str();
@@ -534,6 +535,18 @@ namespace ParametricDramDirectoryMSI{
                     t_start = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
                     
                     IntPtr cache_address = ((IntPtr)(&new_table->entries[a1])) & (~((64 - 1))); 
+                    bool pd_prefetch_requested = false;
+                    IntPtr pending_leaf_line = 0;
+                    if(early_fetch_enabled && level_index == stats_radix.number_of_levels - 2){
+                        std::vector<uint64_t> vpn_indices = computeVpnIndices(address);
+                        ptw_table* leaf_table = resolveTableForLevel(vpn_indices, stats_radix.number_of_levels);
+                        if(leaf_table){
+                            uint64_t leaf_index = vpn_indices.back();
+                            pending_leaf_line = ((IntPtr)(&leaf_table->entries[leaf_index])) & (~((64 - 1)));
+                            cache->setPendingPtePrefetch(cache_address, pending_leaf_line, t_start);
+                            pd_prefetch_requested = true;
+                        }
+                    }
                     if(count && overlap_prefetch_state.valid
                         && level == stats_radix.number_of_levels
                         && cache_address == overlap_prefetch_state.leaf_cache_line){
@@ -574,6 +587,30 @@ namespace ParametricDramDirectoryMSI{
                         total_latency = t_end - t_start + pwc->miss_latency.getLatency();
                     else
                         total_latency = t_end - t_start;
+
+                    if(pd_prefetch_requested && count){
+                        CacheCntlr::LastPtePrefetch last_prefetch;
+                        if(cache->consumeLastPtePrefetch(last_prefetch) && last_prefetch.leaf_line == pending_leaf_line){
+                            uint64_t delta = SubsecondTime::divideRounded(last_prefetch.prefetch_done - last_prefetch.prefetch_issue, core->getDvfsDomain()->getPeriod());
+                            prefeth_latency[last_prefetch.prefetch_hit_where].update(delta);
+                            overlap_prefetch_state.valid = true;
+                            overlap_prefetch_state.leaf_cache_line = last_prefetch.leaf_line;
+                            overlap_prefetch_state.t_issue = last_prefetch.prefetch_issue;
+                            overlap_prefetch_state.t_done = last_prefetch.prefetch_done;
+
+                            SubsecondTime overlap_start = (last_prefetch.prefetch_issue > last_prefetch.pd_issue)
+                                ? last_prefetch.prefetch_issue
+                                : last_prefetch.pd_issue;
+                            SubsecondTime overlap_end = (last_prefetch.prefetch_done < last_prefetch.pd_done)
+                                ? last_prefetch.prefetch_done
+                                : last_prefetch.pd_done;
+                            if(overlap_end > overlap_start){
+                                UInt64 overlap_cycles = SubsecondTime::divideRounded(overlap_end - overlap_start, core->getDvfsDomain()->getPeriod());
+                                pd_prefetch_overlap_histogram.update(overlap_cycles);
+                                pd_prefetch_overlap_samples++;
+                            }
+                        }
+                    }
                     
                     addresses.push_back((IntPtr)(&new_table->entries[a1]));
 
@@ -605,73 +642,6 @@ namespace ParametricDramDirectoryMSI{
             
             bool pd_level = (level_index == stats_radix.number_of_levels - 2);
             bool pd_psc_miss = early_fetch_enabled && pd_level && !pwc_hit;
-
-            // Prefetch the leaf PTE after a PD-level PSC miss (hit or page-fault path).
-            if (pd_psc_miss
-                && new_table->entries[a1].entry_type == ptw_table_entry_type::PTW_TABLE_POINTER
-                && new_table->entries[a1].next_level_table)
-            {
-                CacheCntlr* prefetch_cache = cache;
-                if(mem_manager){
-                    switch (pd_hit_where){
-                        case HitWhere::L1_OWN:
-                            prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::L1_DCACHE);
-                            break;
-                        case HitWhere::L2_OWN:
-                            prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::L2_CACHE);
-                            break;
-                        case HitWhere::L3_OWN:
-                            prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::L3_CACHE);
-                            break;
-                        case HitWhere::L4_OWN:
-                            prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::L4_CACHE);
-                            break;
-                        case HitWhere::DRAM:
-                        case HitWhere::DRAM_LOCAL:
-                        case HitWhere::DRAM_REMOTE:
-                        case HitWhere::DRAM_CACHE:
-                        case HitWhere::MISS:
-                        case HitWhere::NUCA_CACHE:
-                        case HitWhere::CACHE_REMOTE:
-                        case HitWhere::SIBLING:
-                        case HitWhere::L1_SIBLING:
-                        case HitWhere::L2_SIBLING:
-                        case HitWhere::L3_SIBLING:
-                        case HitWhere::L4_SIBLING:
-                        default:
-                            prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::LAST_LEVEL_CACHE);
-                            break;
-                    }
-                }
-                if(!prefetch_cache)
-                    prefetch_cache = cache;
-                std::vector<uint64_t> vpn_indices = computeVpnIndices(address);
-                uint64_t leaf_index = vpn_indices.back();
-                ptw_table* leaf_table = new_table->entries[a1].next_level_table;
-                IntPtr leaf_address = ((IntPtr)(&leaf_table->entries[leaf_index])) & (~((64 - 1)));
-                SubsecondTime prefetch_time = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
-                HitWhere::where_t res = prefetch_cache->processMemOpFromCore(
-                    eip,
-                    lock_signal,
-                    Core::mem_op_t::READ,
-                    leaf_address, 0,
-                    data_buf, data_length,
-                    true,
-                    false, CacheBlockInfo::block_type_t::PAGE_TABLE, SubsecondTime::Zero());
-                pwc->lookup(leaf_address, prefetch_time, true, level + 1, false);
-
-                SubsecondTime prefetch_done = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
-                uint64_t delta = SubsecondTime::divideRounded(prefetch_done - prefetch_time, core->getDvfsDomain()->getPeriod());
-                prefeth_latency[res].update(delta);
-                if(count){
-                    overlap_prefetch_state.valid = true;
-                    overlap_prefetch_state.leaf_cache_line = leaf_address;
-                    overlap_prefetch_state.t_issue = prefetch_time;
-                    overlap_prefetch_state.t_done = prefetch_done;
-                }
-
-                m_shmem_perf_model->setElapsedTime(ShmemPerfModel::_USER_THREAD, prefetch_time);
-            }
 
             return total_latency+InitializeWalkRecursive(eip,address,level+1,new_table->entries[a1].next_level_table,lock_signal,data_buf,data_length,modeled,count, traversal_path, allow_psc_lookup && !pd_psc_miss, psc_state);
         
@@ -943,6 +913,10 @@ namespace ParametricDramDirectoryMSI{
                 fprintf(stats_fp, "[Core %d] proposed PTB overlap ready rate: %.2f%% (%" PRIu64 "/%" PRIu64 ")\n",
                         core_id, overlap_ready_pct, overlap_ready, overlap_samples);
             }
+            if(pd_prefetch_overlap_samples > 0){
+                String label(("[Core " + std::to_string(core_id) + "] proposed PD/PTE prefetch overlap histogram (cycles)").c_str());
+                pd_prefetch_overlap_histogram.print(stats_fp, label.c_str());
+            }
             fclose(stats_fp);
         }
 
@@ -1031,6 +1005,10 @@ namespace ParametricDramDirectoryMSI{
                 fprintf(csv_fp, "proposed_PTB_overlap_ratio_avg,%.4f\n", avg_overlap_ratio);
                 overlap_ratio_histogram.printCsvCdf(csv_fp, "proposed_PTB_overlap_ratio_milli");
                 overlap_tail_latency_histogram.printCsv(csv_fp, "proposed_PTB_overlap_tail_latency_cycles");
+            }
+            if(pd_prefetch_overlap_samples > 0){
+                fprintf(csv_fp, "proposed_PTB_pd_prefetch_overlap_samples,%" PRIu64 "\n", pd_prefetch_overlap_samples);
+                pd_prefetch_overlap_histogram.printCsv(csv_fp, "proposed_PTB_pd_prefetch_overlap_cycles");
             }
 
             for(int i=0; i< HitWhere::NUM_HITWHERES; i++){

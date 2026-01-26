@@ -84,9 +84,11 @@ namespace ParametricDramDirectoryMSI{
             std::unordered_map<HitWhere::where_t, ProposedHistogram> prefeth_latency;
             ProposedHistogram overlap_ratio_histogram;
             ProposedHistogram overlap_tail_latency_histogram;
+            ProposedHistogram pd_prefetch_overlap_histogram;
             UInt64 overlap_samples;
             UInt64 overlap_ready;
             UInt64 overlap_ratio_sum_milli;
+            UInt64 pd_prefetch_overlap_samples;
             bool early_fetch_enabled;
             UInt64 rob_stall_stlb_miss_cycles;
             UInt64 psc_accesses;
