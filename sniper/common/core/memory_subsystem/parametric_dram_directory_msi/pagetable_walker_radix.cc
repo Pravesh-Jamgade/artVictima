@@ -492,6 +492,7 @@ namespace ParametricDramDirectoryMSI{
             IntPtr pwc_address;
             SubsecondTime t_start;
             SubsecondTime total_latency;
+            HitWhere::where_t pd_hit_where = HitWhere::UNKNOWN;
             
             for (int i = stats_radix.number_of_levels; i >= level; i--)
             {
@@ -615,6 +616,8 @@ namespace ParametricDramDirectoryMSI{
 
                     mem_manager->tagCachesBlockType(cache_address,CacheBlockInfo::block_type_t::PAGE_TABLE);
                     recordLevelStats(level-1, total_latency, &hit_where);
+                    if(level_index == stats_radix.number_of_levels - 2)
+                        pd_hit_where = hit_where;
                     if(page_walk_cache_enabled && count){
                         recordPscMiss(level_index, total_latency, hit_where);
                     }
