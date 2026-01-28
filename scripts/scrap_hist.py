@@ -6,10 +6,10 @@ import sys
 from typing import List, Dict, Optional, Tuple
 
 # Regex to check if a line is a header definition line
-HEADER_LINE_RE = re.compile(r"^proposed_PSC_L2_miss_latency_cycles(?:,\[\d+\.\.\d+\])+$")
+HEADER_LINE_RE = re.compile(r"^proposed_PSC_L(\d+)_miss_latency_cycles(?:,\[\d+\.\.\d+\])+$")
 
 # Regex to check if a line is a data line (starts with a folder path)
-DATA_LINE_RE = re.compile(r"^proposed_PSC_L2_miss_latency_cycles(?:,\d+)*$")
+DATA_LINE_RE = re.compile(r"^proposed_PSC_L(\d+)_miss_latency_cycles(?:,\d+)*$")
 LEVEL_RE = re.compile(r"^proposed_PSC_L(\d+)_miss_latency_cycles$")
 
 # The unified, desired final output header collection
@@ -115,5 +115,5 @@ def main(root_dir="", out_csv="stats_histLatency.csv"):
 
 if __name__ == "__main__":
     # Get directory from command line arguments or use current dir if none provided
-    input_dir = sys.argv[1] if len(sys.argv) > 1 else "."
+    input_dir = sys.argv[1]
     main(root_dir=input_dir, out_csv="stats_histLatency.csv")
