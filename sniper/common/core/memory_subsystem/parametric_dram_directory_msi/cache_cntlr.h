@@ -173,12 +173,7 @@ namespace ParametricDramDirectoryMSI
          UInt32 m_log_blocksize;
          UInt32 m_num_sets;
 
-         struct PrefetchEntry
-         {
-            IntPtr address;
-            CacheBlockInfo::block_type_t block_type;
-         };
-         std::deque<PrefetchEntry> m_prefetch_list;
+         std::deque<IntPtr> m_prefetch_list;
          SubsecondTime m_prefetch_next;
 
          void createSetLocks(UInt32 cache_block_size, UInt32 num_sets, UInt32 core_offset, UInt32 num_cores);
@@ -208,24 +203,6 @@ namespace ParametricDramDirectoryMSI
 
    class CacheCntlr : ::CacheCntlr
    {
-      public:
-         struct PrefetchResult
-         {
-            bool issued;
-            SubsecondTime t_done;
-            HitWhere::where_t hit_where;
-         };
-         struct LastPtePrefetch
-         {
-            bool valid;
-            IntPtr leaf_line;
-            SubsecondTime pd_issue;
-            SubsecondTime pd_done;
-            SubsecondTime prefetch_issue;
-            SubsecondTime prefetch_done;
-            HitWhere::where_t prefetch_hit_where;
-         };
-
       private:
          // Data Members
          MemComponent::component_t m_mem_component;
@@ -277,27 +254,17 @@ namespace ParametricDramDirectoryMSI
 
 
 
-         UInt64 prefetches;
+           UInt64 prefetches;
            UInt64 coherency_downgrades, coherency_upgrades, coherency_invalidates, coherency_writebacks;
            #ifdef ENABLE_TRANSITIONS
            UInt64 transitions[CacheState::NUM_CSTATE_SPECIAL_STATES][CacheState::NUM_CSTATE_SPECIAL_STATES];
            UInt64 transition_reasons[Transition::NUM_REASONS][CacheState::NUM_CSTATE_SPECIAL_STATES][CacheState::NUM_CSTATE_SPECIAL_STATES];
            std::unordered_map<IntPtr, Transition::reason_t> seen;
+           #endif
+         } stats;
+         #ifdef TRACK_LATENCY_BY_HITWHERE
+         std::unordered_map<HitWhere::where_t, StatHist> lat_by_where;
          #endif
-        } stats;
-        #ifdef TRACK_LATENCY_BY_HITWHERE
-        std::unordered_map<HitWhere::where_t, StatHist> lat_by_where;
-        #endif
-
-         struct PendingPtePrefetch
-         {
-            bool valid;
-            IntPtr pd_line;
-            IntPtr leaf_line;
-            SubsecondTime pd_issue;
-         };
-         PendingPtePrefetch m_pending_pte_prefetch;
-         LastPtePrefetch m_last_pte_prefetch;
 
          void updateCounters(Core::mem_op_t mem_op_type, IntPtr address, bool cache_hit, CacheState::cstate_t state,CacheBlockInfo::block_type_t block_type, Prefetch::prefetch_type_t isPrefetch);
          void cleanupMshr();
@@ -336,8 +303,8 @@ namespace ParametricDramDirectoryMSI
 
          void copyDataFromNextLevel(Core::mem_op_t mem_op_type, IntPtr address, bool modeled, SubsecondTime t_start, CacheBlockInfo::block_type_t block_type);
          void trainPrefetcher(IntPtr eip, IntPtr address, Core::mem_op_t mem_op_type,  bool cache_hit, bool prefetch_hit, SubsecondTime t_issue);
-         PrefetchResult Prefetch(IntPtr eip, SubsecondTime t_start);
-         PrefetchResult doPrefetch(IntPtr eip, IntPtr prefetch_address, CacheBlockInfo::block_type_t block_type, SubsecondTime t_start);
+         void Prefetch(IntPtr eip, SubsecondTime t_start);
+         void doPrefetch(IntPtr eip, IntPtr prefetch_address, SubsecondTime t_start);
 
          // Cache meta-data operationsz
          SharedCacheBlockInfo* getCacheBlockInfo(IntPtr address);
@@ -402,6 +369,7 @@ namespace ParametricDramDirectoryMSI
          CacheCntlr* lastLevelCache(void);
 
       public:
+
          CacheCntlr(MemComponent::component_t mem_component,
                String name,
                core_id_t core_id,
@@ -434,10 +402,6 @@ namespace ParametricDramDirectoryMSI
                bool count,CacheBlockInfo::block_type_t block_type,SubsecondTime TLB_latency,UtopiaCache *shadow_cache = NULL,
                Core::mem_origin_t mem_origin = Core::mem_origin_t::NORMAL);
          void updateHits(Core::mem_op_t mem_op_type, UInt64 hits);
-         void setPendingPtePrefetch(IntPtr pd_line, IntPtr leaf_line, SubsecondTime pd_issue);
-         bool consumeLastPtePrefetch(LastPtePrefetch &out);
-         bool queuePrefetchAddress(IntPtr address, CacheBlockInfo::block_type_t block_type, SubsecondTime t_issue, bool *queue_was_empty = NULL);
-         PrefetchResult issuePrefetchFromQueue(IntPtr eip, SubsecondTime t_now);
 
          // Notify next level cache of so it can update its sharing set
          void notifyPrevLevelInsert(core_id_t core_id, MemComponent::component_t mem_component, IntPtr address);
