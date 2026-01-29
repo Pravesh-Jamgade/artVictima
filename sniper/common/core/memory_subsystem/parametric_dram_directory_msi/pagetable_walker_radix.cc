@@ -438,7 +438,8 @@ namespace ParametricDramDirectoryMSI{
 
                     IntPtr cache_address = ((IntPtr)(&starting_table->entries[a1])) & (~((64 - 1)));
 
-                    HitWhere::where_t hit_where = cache->processMemOpFromCore(
+                    CacheCntlr* data_cache = selectDataCache(level_index);
+                    HitWhere::where_t hit_where = data_cache->processMemOpFromCore(
                         eip,
                         lock_signal,
                         Core::mem_op_t::READ,
@@ -446,7 +447,6 @@ namespace ParametricDramDirectoryMSI{
                         data_buf, data_length,
                         modeled,
                         count, CacheBlockInfo::block_type_t::PAGE_TABLE, SubsecondTime::Zero(),shadow_cache);
-                    hit_where = applyPerfectDataCache(level_index, hit_where);
 
 
                     addresses.push_back((IntPtr)(&starting_table->entries[a1]));
@@ -603,7 +603,8 @@ namespace ParametricDramDirectoryMSI{
                         overlap_prefetch_state.valid = false;
                     }
 
-                    HitWhere::where_t hit_where = cache->processMemOpFromCore(
+                    CacheCntlr* data_cache = selectDataCache(level_index);
+                    HitWhere::where_t hit_where = data_cache->processMemOpFromCore(
                         eip,
                         lock_signal,
                         Core::mem_op_t::READ,
@@ -611,7 +612,6 @@ namespace ParametricDramDirectoryMSI{
                         data_buf, data_length,
                         modeled,
                         count, CacheBlockInfo::block_type_t::PAGE_TABLE, SubsecondTime::Zero());
-                    hit_where = applyPerfectDataCache(level_index, hit_where);
 
                     SubsecondTime t_end = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
                     
@@ -748,30 +748,32 @@ namespace ParametricDramDirectoryMSI{
         ptb_pdpt_combo_counts[ptb_index][pdpt_index]++;
     }
 
-    HitWhere::where_t PageTableWalkerRadix::applyPerfectDataCache(int level_index, HitWhere::where_t hit_where) const{
-        if(!perfect_data_cache_enabled)
-            return hit_where;
+    CacheCntlr* PageTableWalkerRadix::selectDataCache(int level_index) const{
+        if(!perfect_data_cache_enabled || !mem_manager)
+            return cache;
         int radix_level = level_index + 1;
         if(radix_level != perfect_data_cache_radix_level)
-            return hit_where;
-        if(hit_where == HitWhere::L1_OWN || hit_where == HitWhere::L1_SIBLING)
-            return hit_where;
-        if(hit_where == HitWhere::L2_OWN || hit_where == HitWhere::L2_SIBLING)
-            return hit_where;
+            return cache;
+        MemComponent::component_t component = MemComponent::LAST_LEVEL_CACHE;
         switch(perfect_data_cache_target){
             case HitWhere::L2_OWN:
-                return HitWhere::L2_OWN;
+                component = MemComponent::L2_CACHE;
+                break;
             case HitWhere::L3_OWN:
-                return HitWhere::L3_OWN;
+                component = MemComponent::L3_CACHE;
+                break;
             case HitWhere::L4_OWN:
-                return HitWhere::L4_OWN;
+                component = MemComponent::L4_CACHE;
+                break;
             case HitWhere::NUCA_CACHE:
-                return HitWhere::NUCA_CACHE;
             case HitWhere::DRAM_CACHE:
-                return HitWhere::DRAM_CACHE;
+                component = MemComponent::LAST_LEVEL_CACHE;
+                break;
             default:
-                return hit_where;
+                return cache;
         }
+        CacheCntlr* target_cache = mem_manager->getCacheCntlrAt(core->getId(), component);
+        return target_cache ? target_cache : cache;
     }
 
     void PageTableWalkerRadix::updatePscCombinationState(PscCombinationState *psc_state, int level_index, bool hit, HitWhere::where_t hit_where, bool has_hitwhere){

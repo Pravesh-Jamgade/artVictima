@@ -128,7 +128,7 @@ namespace ParametricDramDirectoryMSI{
             void recordPscMiss(int level_index, SubsecondTime latency, HitWhere::where_t hit_where);
             void updatePscCombinationState(PscCombinationState *psc_state, int level_index, bool hit, HitWhere::where_t hit_where, bool has_hitwhere);
             void recordPtbPdptCombo(bool ptb_hit, bool pdpt_hit);
-            HitWhere::where_t applyPerfectDataCache(int level_index, HitWhere::where_t hit_where) const;
+            CacheCntlr* selectDataCache(int level_index) const;
     };
 
     }
