@@ -80,6 +80,9 @@ namespace ParametricDramDirectoryMSI{
             std::vector<UInt64> psc_miss_latency_total_cycles;
             std::vector<std::array<UInt64, HitWhere::NUM_HITWHERES>> psc_miss_hit_where_counts;
             std::vector<UInt64> rob_stall_psc_level_cycles;
+            bool perfect_data_cache_enabled;
+            int perfect_data_cache_radix_level;
+            HitWhere::where_t perfect_data_cache_target;
             ProposedHistogram stlb_miss_latency_histogram;
             std::unordered_map<HitWhere::where_t, ProposedHistogram> prefeth_latency;
             ProposedHistogram overlap_ratio_histogram;
@@ -93,6 +96,7 @@ namespace ParametricDramDirectoryMSI{
             UInt64 rob_stall_stlb_miss_cycles;
             UInt64 psc_accesses;
             UInt64 psc_misses;
+            std::array<std::array<UInt64, 2>, 2> ptb_pdpt_combo_counts;
             std::map<std::string, UInt64> traversal_path_counts;
             UInt64 traversal_paths_unique_count;
             std::map<std::string, std::array<UInt64, HitWhere::NUM_HITWHERES + 1>> psc_combination_hitwhere_counts;
@@ -109,7 +113,7 @@ namespace ParametricDramDirectoryMSI{
             };
             OverlapPrefetchState overlap_prefetch_state;
             SubsecondTime init_walk(IntPtr eip, IntPtr address, UtopiaCache* shadow_cache, CacheCntlr *_cache,Core::lock_signal_t lock_signal,Byte* data_buf, UInt32 data_length,bool modeled, bool count) ;
-            SubsecondTime InitializeWalkRecursive(IntPtr eip, IntPtr address,int level,ptw_table* new_table,Core::lock_signal_t lock_signal,Byte* data_buf, UInt32 data_length,bool modeled, bool count, std::string &traversal_path, bool allow_psc_lookup, PscCombinationState *psc_state);
+            SubsecondTime InitializeWalkRecursive(IntPtr eip, IntPtr address,int level,ptw_table* new_table,Core::lock_signal_t lock_signal,Byte* data_buf, UInt32 data_length,bool modeled, bool count, std::string &traversal_path, bool allow_psc_lookup, PscCombinationState *psc_state, bool ptb_hit);
             int init_walk_functional(IntPtr address);
             int init_walk_recursive_functional(IntPtr address,int level,ptw_table* new_table);
             bool isPageFault(IntPtr address);
@@ -123,6 +127,8 @@ namespace ParametricDramDirectoryMSI{
             void recordLevelStats(int level_index, SubsecondTime latency, HitWhere::where_t *hit_where = NULL);
             void recordPscMiss(int level_index, SubsecondTime latency, HitWhere::where_t hit_where);
             void updatePscCombinationState(PscCombinationState *psc_state, int level_index, bool hit, HitWhere::where_t hit_where, bool has_hitwhere);
+            void recordPtbPdptCombo(bool ptb_hit, bool pdpt_hit);
+            CacheCntlr* selectDataCache(int level_index) const;
     };
 
     }
