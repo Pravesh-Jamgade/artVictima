@@ -638,6 +638,7 @@ namespace ParametricDramDirectoryMSI{
                 && new_table->entries[a1].next_level_table)
             {
                 CacheCntlr* prefetch_cache = cache;
+                bool add_llc_prefetch = false;
                 if(mem_manager){
                     switch (pd_hit_where){
                         case HitWhere::L1_OWN:
@@ -656,6 +657,8 @@ namespace ParametricDramDirectoryMSI{
                         case HitWhere::DRAM_LOCAL:
                         case HitWhere::DRAM_REMOTE:
                         case HitWhere::DRAM_CACHE:
+                            add_llc_prefetch = true;
+                            break;
                         case HitWhere::MISS:
                         case HitWhere::NUCA_CACHE:
                         case HitWhere::CACHE_REMOTE:
@@ -676,24 +679,41 @@ namespace ParametricDramDirectoryMSI{
                 ptw_table* leaf_table = new_table->entries[a1].next_level_table;
                 IntPtr leaf_address = ((IntPtr)(&leaf_table->entries[leaf_index])) & (~((64 - 1)));
                 SubsecondTime prefetch_time = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
-                HitWhere::where_t res = prefetch_cache->processMemOpFromCore(
-                    eip,
-                    lock_signal,
-                    Core::mem_op_t::READ,
-                    leaf_address, 0,
-                    data_buf, data_length,
-                    true,
-                    false, CacheBlockInfo::block_type_t::PAGE_TABLE, SubsecondTime::Zero());
-                pwc->lookup(leaf_address, prefetch_time, true, level + 1, false);
+                bool queued = false;
+                bool queue_was_empty = false;
+                CacheCntlr::PrefetchResult prefetch_result{false, SubsecondTime::Zero(), HitWhere::UNKNOWN};
+                if(prefetch_cache){
+                    queued = prefetch_cache->queuePrefetchAddress(leaf_address, CacheBlockInfo::block_type_t::PAGE_TABLE, prefetch_time, &queue_was_empty);
+                    if(queued && queue_was_empty)
+                        prefetch_result = prefetch_cache->issuePrefetchFromQueue(eip, prefetch_time);
+                }
 
-                SubsecondTime prefetch_done = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
-                uint64_t delta = SubsecondTime::divideRounded(prefetch_done - prefetch_time, core->getDvfsDomain()->getPeriod());
-                prefeth_latency[res].update(delta);
-                if(count){
-                    overlap_prefetch_state.valid = true;
-                    overlap_prefetch_state.leaf_cache_line = leaf_address;
-                    overlap_prefetch_state.t_issue = prefetch_time;
-                    overlap_prefetch_state.t_done = prefetch_done;
+                if(add_llc_prefetch && mem_manager){
+                    CacheCntlr* llc_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::LAST_LEVEL_CACHE);
+                    if(llc_cache && llc_cache != prefetch_cache){
+                        bool llc_empty = false;
+                        CacheCntlr::PrefetchResult llc_result{false, SubsecondTime::Zero(), HitWhere::UNKNOWN};
+                        bool llc_queued = llc_cache->queuePrefetchAddress(leaf_address, CacheBlockInfo::block_type_t::PAGE_TABLE, prefetch_time, &llc_empty);
+                        if(llc_queued && llc_empty)
+                            llc_result = llc_cache->issuePrefetchFromQueue(eip, prefetch_time);
+                        if(llc_result.issued
+                            && (!prefetch_result.issued || llc_result.t_done < prefetch_result.t_done))
+                            prefetch_result = llc_result;
+                    }
+                }
+
+                if(queued)
+                    pwc->lookup(leaf_address, prefetch_time, true, level + 1, false);
+
+                if(prefetch_result.issued){
+                    uint64_t delta = SubsecondTime::divideRounded(prefetch_result.t_done - prefetch_time, core->getDvfsDomain()->getPeriod());
+                    prefeth_latency[prefetch_result.hit_where].update(delta);
+                    if(count){
+                        overlap_prefetch_state.valid = true;
+                        overlap_prefetch_state.leaf_cache_line = leaf_address;
+                        overlap_prefetch_state.t_issue = prefetch_time;
+                        overlap_prefetch_state.t_done = prefetch_result.t_done;
+                    }
                 }
 
                 m_shmem_perf_model->setElapsedTime(ShmemPerfModel::_USER_THREAD, prefetch_time);

@@ -173,7 +173,12 @@ namespace ParametricDramDirectoryMSI
          UInt32 m_log_blocksize;
          UInt32 m_num_sets;
 
-         std::deque<IntPtr> m_prefetch_list;
+         struct PrefetchEntry
+         {
+            IntPtr address;
+            CacheBlockInfo::block_type_t block_type;
+         };
+         std::deque<PrefetchEntry> m_prefetch_list;
          SubsecondTime m_prefetch_next;
 
          void createSetLocks(UInt32 cache_block_size, UInt32 num_sets, UInt32 core_offset, UInt32 num_cores);
@@ -203,6 +208,14 @@ namespace ParametricDramDirectoryMSI
 
    class CacheCntlr : ::CacheCntlr
    {
+      public:
+         struct PrefetchResult
+         {
+            bool issued;
+            SubsecondTime t_done;
+            HitWhere::where_t hit_where;
+         };
+
       private:
          // Data Members
          MemComponent::component_t m_mem_component;
@@ -304,8 +317,8 @@ namespace ParametricDramDirectoryMSI
 
          void copyDataFromNextLevel(Core::mem_op_t mem_op_type, IntPtr address, bool modeled, SubsecondTime t_start, CacheBlockInfo::block_type_t block_type);
          void trainPrefetcher(IntPtr eip, IntPtr address, Core::mem_op_t mem_op_type,  bool cache_hit, bool prefetch_hit, SubsecondTime t_issue);
-         void Prefetch(IntPtr eip, SubsecondTime t_start);
-         void doPrefetch(IntPtr eip, IntPtr prefetch_address, SubsecondTime t_start);
+         PrefetchResult Prefetch(IntPtr eip, SubsecondTime t_start);
+         PrefetchResult doPrefetch(IntPtr eip, IntPtr prefetch_address, CacheBlockInfo::block_type_t block_type, SubsecondTime t_start);
 
          // Cache meta-data operationsz
          SharedCacheBlockInfo* getCacheBlockInfo(IntPtr address);
@@ -370,7 +383,6 @@ namespace ParametricDramDirectoryMSI
          CacheCntlr* lastLevelCache(void);
 
       public:
-
          CacheCntlr(MemComponent::component_t mem_component,
                String name,
                core_id_t core_id,
@@ -403,6 +415,8 @@ namespace ParametricDramDirectoryMSI
                bool count,CacheBlockInfo::block_type_t block_type,SubsecondTime TLB_latency,UtopiaCache *shadow_cache = NULL,
                Core::mem_origin_t mem_origin = Core::mem_origin_t::NORMAL);
          void updateHits(Core::mem_op_t mem_op_type, UInt64 hits);
+         bool queuePrefetchAddress(IntPtr address, CacheBlockInfo::block_type_t block_type, SubsecondTime t_issue, bool *queue_was_empty = NULL);
+         PrefetchResult issuePrefetchFromQueue(IntPtr eip, SubsecondTime t_now);
 
          // Notify next level cache of so it can update its sharing set
          void notifyPrevLevelInsert(core_id_t core_id, MemComponent::component_t mem_component, IntPtr address);
