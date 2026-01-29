@@ -89,6 +89,27 @@ namespace ParametricDramDirectoryMSI
 
   }
 
+  PWC::where_t PWC::probe(IntPtr address, int level)
+  {
+    if(perfect)
+      return PWC::HIT;
+    CacheBlockInfo* cache_block = NULL;
+    switch(level){
+      case 1:
+        cache_block = m_L4_cache.peekSingleLine(address);
+        break;
+      case 2:
+        cache_block = m_L3_cache.peekSingleLine(address);
+        break;
+      case 3:
+        cache_block = m_L2_cache.peekSingleLine(address);
+        break;
+      default:
+        return PWC::MISS;
+    }
+    return cache_block ? PWC::HIT : PWC::MISS;
+  }
+
   void PWC::allocate(IntPtr address, SubsecondTime now, Cache *pwc_cache)
   {
     bool eviction;
