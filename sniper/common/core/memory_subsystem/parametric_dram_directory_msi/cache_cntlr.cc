@@ -228,6 +228,7 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
       m_prefetch_on_prefetch_hit = Sim()->getCfg()->getBoolArray("perf_model/" + cache_params.configName + "/prefetcher/prefetch_on_prefetch_hit", core_id);
 
    int levels_ptw=Sim()->getCfg()->getInt("perf_model/ptw_radix/levels");
+   m_perfect_for_radix_level.resize(levels_ptw,false);
    for(int i=0; i< levels_ptw; i++)
    {
       m_perfect_for_radix_level[i] = Sim()->getCfg()->getBoolArray("perf_model/"+cache_params.configName+"/perfect_for_radix_level", i);
@@ -476,7 +477,7 @@ CacheCntlr::processMemOpFromCore(
       cache_block_info->invalidate();
       cache_block_info = NULL;
    }
-   else if(mem_origin >= mem_origin_t::PML4_ACCESS && mem_origin <= mem_origin_t::PT_ACCESS){
+   else if(mem_origin >= Core::mem_origin_t::PML4_ACCESS && mem_origin <= Core::mem_origin_t::PT_ACCESS){
       cache_hit = true;
       hit_where = HitWhere::where_t(m_mem_component);
       if (cache_block_info)
@@ -1022,7 +1023,7 @@ CacheCntlr::processShmemReqFromPrevCache(IntPtr eip, CacheCntlr* requester, Core
       cache_block_info = NULL;
       LOG_ASSERT_ERROR(m_next_cache_cntlr != NULL, "Cannot do passthrough on an LLC");
    }
-   else if(mem_origin >= mem_origin_t::PML4_ACCESS && mem_origin <= mem_origin_t::PT_ACCESS){
+   else if(mem_origin >= Core::mem_origin_t::PML4_ACCESS && mem_origin <= Core::mem_origin_t::PT_ACCESS){
       cache_hit = true;
       hit_where = HitWhere::where_t(m_mem_component);
       if (cache_block_info)

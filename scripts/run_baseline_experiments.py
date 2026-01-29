@@ -22,6 +22,16 @@ TRACES = [
     ("gen", "gen.sift"),
 ]
 
+MULTI_CORE = [
+    ("8core", ["cc.sift", "dlrm.sift", "gc.sift", "rnd.sift", "bfs.sift", "sssp.sift", "gen.sift", "pr.sift"]),
+    ("4core_cc_dlrm_gc_rnd", ["cc.sift", "dlrm.sift", "gc.sift", "rnd.sift"]),
+    ("4core_bfs_sssp_gen_pr", ["bfs.sift", "sssp.sift", "gen.sift", "pr.sift"]),
+    ("2core_cc_rnd", ["cc.sift", "rnd.sift"]), 
+    ("2core_dlrm_rnd", ["dlrm.sift", "rnd.sift"]), 
+    ("2core_gc_rnd", ["gc.sift", "rnd.sift"]), 
+    ("2core_bfs_rnd", ["bfs.sift", "rnd.sift"])
+]
+
 DEFAULT_IMAGE = "docker.io/kanell21/artifact_evaluation:victima"
 SNIPER_COMMAND = "/app/sniper/run-sniper -s stop-by-icount:500000000 --genstats --power"
 
@@ -262,6 +272,41 @@ def build_commands(args: argparse.Namespace) -> List[Tuple[str, str]]:
             os.makedirs(output_dir, exist_ok=True)
 
             trace_command = f"--traces={os.path.join(args.traces_dir, trace)}"
+            output_command = f"-d /app/{output_dir}"
+            config_command = f"-c {config_path}"
+            job_label = f"{experiment_label}_{trace_name}"
+
+            base_command = (
+                f"{docker_prefix} {SNIPER_COMMAND} "
+                f"{output_command} {config_command} {trace_command}"
+            )
+
+            if args.mode == "slurm":
+                slurm_directives = [
+                    "sbatch",
+                    f"-J {job_label}",
+                    f"--output={output_dir}.out",
+                    f"--error={output_dir}.err",
+                ]
+                if args.excluded_nodes:
+                    slurm_directives.insert(1, f"--exclude={args.excluded_nodes}")
+
+                command = (
+                    " ".join(slurm_directives)
+                    + ' docker_wrapper.sh "'
+                    + base_command
+                    + '"'
+                )
+            else:
+                command = f"{base_command} > {output_dir}.out 2> {output_dir}.err"
+
+            commands.append((command, job_label))
+
+        for trace_name, trace_list in MULTI_CORE:
+            output_dir = experiment_root / trace_name
+            os.makedirs(output_dir, exist_ok=True)
+
+            trace_command = f"--traces={','.join([os.path.join(args.traces_dir, t) for t in trace_list])}"
             output_command = f"-d /app/{output_dir}"
             config_command = f"-c {config_path}"
             job_label = f"{experiment_label}_{trace_name}"
