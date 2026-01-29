@@ -26,32 +26,35 @@ DEFAULT_IMAGE = "docker.io/kanell21/artifact_evaluation:victima"
 SNIPER_COMMAND = "/app/sniper/run-sniper -s stop-by-icount:500000000 --genstats --power"
 
 EXPERIMENT_CONFIGS = {
-     "baseline": {
+    "baseline": {
         "config": "/app/sniper/config/virtual_memory_configs/radix.cfg",
         "label": "baseline",
+    },
+
+    "radix_perfect_pwc": {
+        "config": "/app/sniper/config/virtual_memory_configs/radix_perfect_pwc.cfg",
+        "label": "radix_perfect_pwc",
     },
 
     "perfect": {
         "config": "/app/sniper/config/virtual_memory_configs/perfecttlb.cfg",
         "label": "perfect",
     },
+    
+    "vikram_both": {
+        "config": "/app/sniper/config/virtual_memory_configs/vikram_both.cfg",
+        "label": "vikram_both",
+    },
 
-    # "baseline-virtualized": {
-    #     "config": "/app/sniper/config/virtual_memory_configs/virtualized.cfg",
-    #     "label": "baseline_virtual",
-    # },
-    "ptb": {
-        "config": "/app/sniper/config/virtual_memory_configs/ptb.cfg",
-        "label": "ptb",
+    "vikram_fetch": {
+        "config": "/app/sniper/config/virtual_memory_configs/vikram_fetch.cfg",
+        "label": "vikram_fetch",
     },
-    "ptb-pd": {
-        "config": "/app/sniper/config/virtual_memory_configs/ptbpd.cfg",
-        "label": "ptb-pd",
+
+    "vikram_ptb": {
+        "config": "/app/sniper/config/virtual_memory_configs/vikram_ptb.cfg",
+        "label": "vikram_ptb",
     },
-    # "ptb-virtualized": {
-    #     "config": "/app/sniper/config/virtual_memory_configs/ptb_virtual.cfg",
-    #     "label": "ptb_virtual",
-    # },
 
     "victima": {
         "config": "/app/sniper/config/virtual_memory_configs/victima.cfg",
@@ -67,11 +70,6 @@ EXPERIMENT_CONFIGS = {
         "config": "/app/sniper/config/virtual_memory_configs/potm.cfg",
         "label": "potm",
     },
-
-    # "victima-virtualized": {
-    #     "config": "/app/sniper/config/virtual_memory_configs/victima_virtual.cfg",
-    #     "label": "victima_virtual",
-    # },
 }
 
 # "baseline": {
@@ -187,14 +185,13 @@ def csv_choices(value_string):
     choices = [
         "all",
         "baseline",
-        "baseline-virtualized",
-        "ptb",
-        "ptb-virtualized",
-        "ptb-pd",
+        "radix_perfect_pwc",
         "victima",
-        "victima-virtualized",
         "utopia",
         "potm",
+        "vikram_both",
+        "vikram_fetch",
+        "vikram_ptb",
         "perfect",
         "custom",
     ]
@@ -227,9 +224,14 @@ def resolve_experiments(args: argparse.Namespace) -> List[Tuple[str, str]]:
     if args.experiment == "all":
         keys: Iterable[str] = [
             "baseline",
-            "baseline-virtualized",
-            "ptb",
-            "ptb-virtualized",
+            "radix_perfect_pwc",
+            "victima",
+            "utopia",
+            "potm",
+            "vikram_both",
+            "vikram_fetch",
+            "vikram_ptb",
+            "perfect"
         ]
     else:
         keys = parse_string_experiments(args.experiment)
