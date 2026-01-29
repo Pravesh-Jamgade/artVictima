@@ -34,6 +34,7 @@ class NucaCache
       ShmemPerf m_dummy_shmem_perf;
 
       bool perfect;
+      std::vector<bool> m_perfect_for_radix_level;
 
       SubsecondTime accessDataArray(Cache::access_t access, SubsecondTime t_start, ShmemPerf *perf);
 

@@ -40,6 +40,11 @@ NucaCache::NucaCache(MemoryManagerBase* memory_manager, ShmemPerfModel* shmem_pe
       String queue_model_type = Sim()->getCfg()->getString("perf_model/nuca/queue_model/type");
       m_queue_model = QueueModel::create("nuca-cache-queue", m_core_id, queue_model_type, m_data_array_bandwidth.getRoundedLatency(8 * m_cache_block_size)); // bytes to bits
    }
+   int levels_ptw=Sim()->getCfg()->getInt("perf_model/ptw_radix/levels");
+   for(int i=0; i< levels_ptw; i++)
+   {
+      m_perfect_for_radix_level[i] = Sim()->getCfg()->getBoolArray("perf_model/nuca/cache/perfect_for_radix_level", i);
+   }
 
    registerStatsMetric("nuca-cache", m_core_id, "reads", &m_reads);
    registerStatsMetric("nuca-cache", m_core_id, "writes", &m_writes);

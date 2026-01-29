@@ -70,7 +70,11 @@ class Core
 
       enum mem_origin_t
       {
-         PAGE_TABLE_WALK = 0,
+         PAGE_TABLE_WALK=0,
+         PML4_ACCESS,
+         PDPT_ACCESS,
+         PD_ACCESS,
+         PT_ACCESS,
          NORMAL,
          NUM_MEM_ORIGINS
       };
