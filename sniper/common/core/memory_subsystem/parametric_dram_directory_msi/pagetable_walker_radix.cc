@@ -756,34 +756,18 @@ namespace ParametricDramDirectoryMSI{
             return hit_where;
         if(hit_where == HitWhere::L1_OWN || hit_where == HitWhere::L1_SIBLING)
             return hit_where;
+        if(hit_where == HitWhere::L2_OWN || hit_where == HitWhere::L2_SIBLING)
+            return hit_where;
         switch(perfect_data_cache_target){
             case HitWhere::L2_OWN:
-                if(hit_where == HitWhere::L2_OWN || hit_where == HitWhere::L2_SIBLING)
-                    return hit_where;
                 return HitWhere::L2_OWN;
             case HitWhere::L3_OWN:
-                if(hit_where == HitWhere::L2_OWN || hit_where == HitWhere::L2_SIBLING
-                   || hit_where == HitWhere::L3_OWN || hit_where == HitWhere::L3_SIBLING)
-                    return hit_where;
                 return HitWhere::L3_OWN;
             case HitWhere::L4_OWN:
-                if(hit_where == HitWhere::L2_OWN || hit_where == HitWhere::L2_SIBLING
-                   || hit_where == HitWhere::L3_OWN || hit_where == HitWhere::L3_SIBLING
-                   || hit_where == HitWhere::L4_OWN || hit_where == HitWhere::L4_SIBLING)
-                    return hit_where;
                 return HitWhere::L4_OWN;
             case HitWhere::NUCA_CACHE:
-                if(hit_where == HitWhere::L2_OWN || hit_where == HitWhere::L2_SIBLING
-                   || hit_where == HitWhere::L3_OWN || hit_where == HitWhere::L3_SIBLING
-                   || hit_where == HitWhere::L4_OWN || hit_where == HitWhere::L4_SIBLING)
-                    return hit_where;
                 return HitWhere::NUCA_CACHE;
             case HitWhere::DRAM_CACHE:
-                if(hit_where == HitWhere::L2_OWN || hit_where == HitWhere::L2_SIBLING
-                   || hit_where == HitWhere::L3_OWN || hit_where == HitWhere::L3_SIBLING
-                   || hit_where == HitWhere::L4_OWN || hit_where == HitWhere::L4_SIBLING
-                   || hit_where == HitWhere::NUCA_CACHE)
-                    return hit_where;
                 return HitWhere::DRAM_CACHE;
             default:
                 return hit_where;
