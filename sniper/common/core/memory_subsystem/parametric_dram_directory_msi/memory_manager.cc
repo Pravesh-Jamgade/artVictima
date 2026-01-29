@@ -261,13 +261,11 @@
                pwc_L2_assoc  = Sim()->getCfg()->getInt("perf_model/ptw/pwc/l2_assoc");
 
                bool pwc_perfect =  Sim()->getCfg()->getBool("perf_model/ptw/pwc/perfect");
-               int pwc_perfect_cache_level = Sim()->getCfg()->getIntDefault("perf_model/ptw/pwc/perfect_cache_level", 0);
-               int pwc_perfect_radix_level = Sim()->getCfg()->getIntDefault("perf_model/ptw/pwc/perfect_radix_level", 0);
 
                pwc_access_latency  = ComponentLatency(core->getDvfsDomain(), Sim()->getCfg()->getInt("perf_model/ptw/pwc/access_penalty"));
                pwc_miss_latency  = ComponentLatency(core->getDvfsDomain(), Sim()->getCfg()->getInt("perf_model/ptw/pwc/miss_penalty"));
 
-               pwc  = new PWC("pwc", "perf_model/ptw/pwc", getCore()->getId(),pwc_L4_assoc,pwc_L4_size,pwc_L3_assoc,pwc_L3_size,pwc_L2_assoc,pwc_L2_size, pwc_access_latency, pwc_miss_latency, pwc_perfect, pwc_perfect_cache_level, pwc_perfect_radix_level);
+               pwc  = new PWC("pwc", "perf_model/ptw/pwc", getCore()->getId(),pwc_L4_assoc,pwc_L4_size,pwc_L3_assoc,pwc_L3_size,pwc_L2_assoc,pwc_L2_size, pwc_access_latency, pwc_miss_latency, pwc_perfect);
             }
 
             m_ptb_enabled = Sim()->getCfg()->getBoolDefault("perf_model/ptb/enabled", false);

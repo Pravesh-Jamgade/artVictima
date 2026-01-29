@@ -16,7 +16,7 @@ namespace ParametricDramDirectoryMSI
   IntPtr PWC::SIM_PAGE_MASK;
 
          
-  PWC::PWC(String name, String cfgname, core_id_t core_id, UInt32 L4_associativity, UInt32 L4_num_entries, UInt32 L3_associativity, UInt32 L3_num_entries, UInt32 L2_associativity, UInt32 L2_num_entries, ComponentLatency _access_latency, ComponentLatency _miss_latency, bool _perfect, int _perfect_cache_level, int _perfect_radix_level)
+  PWC::PWC(String name, String cfgname, core_id_t core_id, UInt32 L4_associativity, UInt32 L4_num_entries, UInt32 L3_associativity, UInt32 L3_num_entries, UInt32 L2_associativity, UInt32 L2_num_entries, ComponentLatency _access_latency, ComponentLatency _miss_latency, bool _perfect)
     : m_core_id(core_id)
     , access_latency(_access_latency)
     , miss_latency(_miss_latency)
@@ -24,8 +24,6 @@ namespace ParametricDramDirectoryMSI
     , m_L3_cache(name + "_L3", cfgname, core_id, L3_num_entries / L3_associativity, L3_associativity, 8, "lru", CacheBase::PR_L1_CACHE)
     , m_L2_cache(name + "_L2", cfgname, core_id, L2_num_entries / L2_associativity, L2_associativity, 8, "lru", CacheBase::PR_L1_CACHE)  
     , perfect(_perfect)
-    , perfect_cache_level(_perfect_cache_level)
-    , perfect_radix_level(_perfect_radix_level)
   {
 
     registerStatsMetric(name+"_L4", core_id, "access", &m_l4_access);
@@ -42,7 +40,7 @@ namespace ParametricDramDirectoryMSI
   PWC::where_t PWC::lookup(IntPtr address, SubsecondTime now, bool allocate_on_miss, int level, bool count)
   {
     bool hit;
-    if(perfect || (level == perfect_radix_level && (perfect_cache_level == 0 || perfect_cache_level == level)))
+    if(perfect)
       return PWC::HIT;
     //TODO model bitmap cache access here
     switch(level){
@@ -93,7 +91,7 @@ namespace ParametricDramDirectoryMSI
 
   PWC::where_t PWC::probe(IntPtr address, int level)
   {
-    if(perfect || (level == perfect_radix_level && (perfect_cache_level == 0 || perfect_cache_level == level)))
+    if(perfect)
       return PWC::HIT;
     CacheBlockInfo* cache_block = NULL;
     switch(level){

@@ -80,6 +80,9 @@ namespace ParametricDramDirectoryMSI{
             std::vector<UInt64> psc_miss_latency_total_cycles;
             std::vector<std::array<UInt64, HitWhere::NUM_HITWHERES>> psc_miss_hit_where_counts;
             std::vector<UInt64> rob_stall_psc_level_cycles;
+            bool perfect_data_cache_enabled;
+            int perfect_data_cache_radix_level;
+            HitWhere::where_t perfect_data_cache_target;
             ProposedHistogram stlb_miss_latency_histogram;
             std::unordered_map<HitWhere::where_t, ProposedHistogram> prefeth_latency;
             ProposedHistogram overlap_ratio_histogram;
@@ -125,6 +128,7 @@ namespace ParametricDramDirectoryMSI{
             void recordPscMiss(int level_index, SubsecondTime latency, HitWhere::where_t hit_where);
             void updatePscCombinationState(PscCombinationState *psc_state, int level_index, bool hit, HitWhere::where_t hit_where, bool has_hitwhere);
             void recordPtbPdptCombo(bool ptb_hit, bool pdpt_hit);
+            HitWhere::where_t applyPerfectDataCache(int level_index, HitWhere::where_t hit_where) const;
     };
 
     }

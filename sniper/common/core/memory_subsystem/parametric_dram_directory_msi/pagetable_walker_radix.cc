@@ -9,6 +9,7 @@
 #include <time.h>
 #include <algorithm>
 #include <sstream>
+#include <cctype>
 
 
 namespace ParametricDramDirectoryMSI{
@@ -174,6 +175,25 @@ namespace ParametricDramDirectoryMSI{
                 fprintf(fp, ",%" PRIu64, entry.second);
             fprintf(fp, "\n");
         }
+
+        HitWhere::where_t parsePerfectDataCacheTarget(const String &target_string){
+            if(target_string.empty())
+                return HitWhere::UNKNOWN;
+            std::string target(target_string.c_str());
+            std::transform(target.begin(), target.end(), target.begin(),
+                           [](unsigned char c){ return static_cast<char>(std::tolower(c)); });
+            if(target == "l2")
+                return HitWhere::L2_OWN;
+            if(target == "l3" || target == "llc")
+                return HitWhere::L3_OWN;
+            if(target == "l4")
+                return HitWhere::L4_OWN;
+            if(target == "nuca" || target == "nuca-cache")
+                return HitWhere::NUCA_CACHE;
+            if(target == "dram-cache")
+                return HitWhere::DRAM_CACHE;
+            return HitWhere::UNKNOWN;
+        }
     }
 
     PageTableWalkerRadix::PageTableWalkerRadix(int number_of_levels, 
@@ -212,6 +232,10 @@ namespace ParametricDramDirectoryMSI{
         for (auto &counts : psc_miss_hit_where_counts)
             counts.fill(0);
         rob_stall_psc_level_cycles.resize(number_of_levels, 0);
+        perfect_data_cache_radix_level = Sim()->getCfg()->getIntDefault("perf_model/ptw/perfect_radix_level", 0);
+        perfect_data_cache_target = parsePerfectDataCacheTarget(
+            Sim()->getCfg()->getStringDefault("perf_model/ptw/perfect_data_cache", ""));
+        perfect_data_cache_enabled = (perfect_data_cache_radix_level > 0 && perfect_data_cache_target != HitWhere::UNKNOWN);
         psc_accesses = 0;
         psc_misses = 0;
         for (auto &row : ptb_pdpt_combo_counts)
@@ -422,6 +446,7 @@ namespace ParametricDramDirectoryMSI{
                         data_buf, data_length,
                         modeled,
                         count, CacheBlockInfo::block_type_t::PAGE_TABLE, SubsecondTime::Zero(),shadow_cache);
+                    hit_where = applyPerfectDataCache(level_index, hit_where);
 
 
                     addresses.push_back((IntPtr)(&starting_table->entries[a1]));
@@ -586,6 +611,7 @@ namespace ParametricDramDirectoryMSI{
                         data_buf, data_length,
                         modeled,
                         count, CacheBlockInfo::block_type_t::PAGE_TABLE, SubsecondTime::Zero());
+                    hit_where = applyPerfectDataCache(level_index, hit_where);
 
                     SubsecondTime t_end = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
                     
@@ -720,6 +746,48 @@ namespace ParametricDramDirectoryMSI{
         size_t ptb_index = ptb_hit ? 1 : 0;
         size_t pdpt_index = pdpt_hit ? 1 : 0;
         ptb_pdpt_combo_counts[ptb_index][pdpt_index]++;
+    }
+
+    HitWhere::where_t PageTableWalkerRadix::applyPerfectDataCache(int level_index, HitWhere::where_t hit_where) const{
+        if(!perfect_data_cache_enabled)
+            return hit_where;
+        int radix_level = level_index + 1;
+        if(radix_level != perfect_data_cache_radix_level)
+            return hit_where;
+        if(hit_where == HitWhere::L1_OWN || hit_where == HitWhere::L1_SIBLING)
+            return hit_where;
+        switch(perfect_data_cache_target){
+            case HitWhere::L2_OWN:
+                if(hit_where == HitWhere::L2_OWN || hit_where == HitWhere::L2_SIBLING)
+                    return hit_where;
+                return HitWhere::L2_OWN;
+            case HitWhere::L3_OWN:
+                if(hit_where == HitWhere::L2_OWN || hit_where == HitWhere::L2_SIBLING
+                   || hit_where == HitWhere::L3_OWN || hit_where == HitWhere::L3_SIBLING)
+                    return hit_where;
+                return HitWhere::L3_OWN;
+            case HitWhere::L4_OWN:
+                if(hit_where == HitWhere::L2_OWN || hit_where == HitWhere::L2_SIBLING
+                   || hit_where == HitWhere::L3_OWN || hit_where == HitWhere::L3_SIBLING
+                   || hit_where == HitWhere::L4_OWN || hit_where == HitWhere::L4_SIBLING)
+                    return hit_where;
+                return HitWhere::L4_OWN;
+            case HitWhere::NUCA_CACHE:
+                if(hit_where == HitWhere::L2_OWN || hit_where == HitWhere::L2_SIBLING
+                   || hit_where == HitWhere::L3_OWN || hit_where == HitWhere::L3_SIBLING
+                   || hit_where == HitWhere::L4_OWN || hit_where == HitWhere::L4_SIBLING)
+                    return hit_where;
+                return HitWhere::NUCA_CACHE;
+            case HitWhere::DRAM_CACHE:
+                if(hit_where == HitWhere::L2_OWN || hit_where == HitWhere::L2_SIBLING
+                   || hit_where == HitWhere::L3_OWN || hit_where == HitWhere::L3_SIBLING
+                   || hit_where == HitWhere::L4_OWN || hit_where == HitWhere::L4_SIBLING
+                   || hit_where == HitWhere::NUCA_CACHE)
+                    return hit_where;
+                return HitWhere::DRAM_CACHE;
+            default:
+                return hit_where;
+        }
     }
 
     void PageTableWalkerRadix::updatePscCombinationState(PscCombinationState *psc_state, int level_index, bool hit, HitWhere::where_t hit_where, bool has_hitwhere){
