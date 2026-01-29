@@ -516,6 +516,11 @@ namespace ParametricDramDirectoryMSI{
                     if( pwc_where == PWC::HIT ) pwc_hit = true; 
 
                 }
+                
+                if(level == (stats_radix.number_of_levels))
+                {
+                    pwc_hit = pwc->isPerfect();
+                }
             }
 		
             if(pwc_hit == true){
@@ -530,7 +535,6 @@ namespace ParametricDramDirectoryMSI{
                     recordLevelStats(level-1, total_latency);
             }
             else{
-                    
                     t_start = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
                     
                     IntPtr cache_address = ((IntPtr)(&new_table->entries[a1])) & (~((64 - 1))); 

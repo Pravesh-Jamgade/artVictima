@@ -47,6 +47,8 @@ namespace ParametricDramDirectoryMSI
     PWC::where_t lookup(IntPtr address, SubsecondTime now, bool allocate_on_miss , int level , bool count);
     void allocate(IntPtr address, SubsecondTime now, Cache *pwc_cache);
     static const UInt64 HASH_PRIME = 124183;
+
+    bool isPerfect() { return perfect; }
  
   };
 }
