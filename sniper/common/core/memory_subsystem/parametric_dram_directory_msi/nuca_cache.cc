@@ -36,6 +36,7 @@ NucaCache::NucaCache(MemoryManagerBase* memory_manager, ShmemPerfModel* shmem_pe
 
    if (Sim()->getCfg()->getBool("perf_model/nuca/queue_model/enabled"))
    {
+      perfect = Sim()->getCfg()->getBool("perf_model/nuca/cache/perfect");
       String queue_model_type = Sim()->getCfg()->getString("perf_model/nuca/queue_model/type");
       m_queue_model = QueueModel::create("nuca-cache-queue", m_core_id, queue_model_type, m_data_array_bandwidth.getRoundedLatency(8 * m_cache_block_size)); // bytes to bits
    }
