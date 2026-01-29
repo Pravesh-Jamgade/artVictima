@@ -45,6 +45,7 @@ namespace ParametricDramDirectoryMSI
 
     PWC(String name, String cfgname, core_id_t core_id, UInt32 L1_num_entries, UInt32 L1_associativity, UInt32 L2_num_entries, UInt32 L2_associativity, UInt32 L3_num_entries, UInt32 L3_associativity, ComponentLatency access_latency, ComponentLatency miss_latency, bool perfect);
     PWC::where_t lookup(IntPtr address, SubsecondTime now, bool allocate_on_miss , int level , bool count);
+    PWC::where_t probe(IntPtr address, int level);
     void allocate(IntPtr address, SubsecondTime now, Cache *pwc_cache);
     static const UInt64 HASH_PRIME = 124183;
  
