@@ -458,7 +458,7 @@ CacheCntlr::processMemOpFromCore(
       cache_hit = true;
       hit_where = HitWhere::where_t(m_mem_component);
       if (cache_block_info)
-         cache_block_info->setCState(CacheState::MODIFIED);
+      {}
       else
       {
          insertCacheBlock(ca_address, mem_op_type == Core::READ ? CacheState::SHARED : CacheState::MODIFIED, NULL, m_core_id, ShmemPerfModel::_USER_THREAD, block_type);
@@ -477,11 +477,18 @@ CacheCntlr::processMemOpFromCore(
       cache_block_info->invalidate();
       cache_block_info = NULL;
    }
-   else if(mem_origin >= Core::mem_origin_t::PML4_ACCESS && mem_origin <= Core::mem_origin_t::PT_ACCESS){
+   
+   bool page_walk_access = (mem_origin == Core::mem_origin_t::PML4_ACCESS) || 
+                           (mem_origin == Core::mem_origin_t::PDPT_ACCESS) || 
+                           (mem_origin == Core::mem_origin_t::PD_ACCESS) || 
+                           (mem_origin == Core::mem_origin_t::PT_ACCESS);
+
+   if(!cache_hit && m_perfect_for_radix_level[int(mem_origin - Core::mem_origin_t::PML4_ACCESS)] && page_walk_access){
+      // std::cout << "Level " << int(mem_origin - Core::mem_origin_t::PML4_ACCESS) << " perfect\n";
       cache_hit = true;
       hit_where = HitWhere::where_t(m_mem_component);
       if (cache_block_info)
-         cache_block_info->setCState(CacheState::MODIFIED);
+      {}
       else
       {
          insertCacheBlock(ca_address, mem_op_type == Core::READ ? CacheState::SHARED : CacheState::MODIFIED, NULL, m_core_id, ShmemPerfModel::_USER_THREAD, block_type);
@@ -1023,11 +1030,19 @@ CacheCntlr::processShmemReqFromPrevCache(IntPtr eip, CacheCntlr* requester, Core
       cache_block_info = NULL;
       LOG_ASSERT_ERROR(m_next_cache_cntlr != NULL, "Cannot do passthrough on an LLC");
    }
-   else if(mem_origin >= Core::mem_origin_t::PML4_ACCESS && mem_origin <= Core::mem_origin_t::PT_ACCESS){
+   
+   bool page_walk_access = (mem_origin == Core::mem_origin_t::PML4_ACCESS) || 
+                           (mem_origin == Core::mem_origin_t::PDPT_ACCESS) || 
+                           (mem_origin == Core::mem_origin_t::PD_ACCESS) || 
+                           (mem_origin == Core::mem_origin_t::PT_ACCESS);
+   if(!cache_hit && m_perfect_for_radix_level[int(mem_origin - Core::mem_origin_t::PML4_ACCESS)] && page_walk_access){
+      // std::cout << "Level " << int(mem_origin - Core::mem_origin_t::PML4_ACCESS) << " perfect\n";
       cache_hit = true;
       hit_where = HitWhere::where_t(m_mem_component);
       if (cache_block_info)
-         cache_block_info->setCState(CacheState::MODIFIED);
+      {
+         // cache_block_info->setCState(CacheState::MODIFIED);
+      }
       else
       {
          insertCacheBlock(address, mem_op_type == Core::READ ? CacheState::SHARED : CacheState::MODIFIED, NULL, m_core_id, ShmemPerfModel::_USER_THREAD, block_type);

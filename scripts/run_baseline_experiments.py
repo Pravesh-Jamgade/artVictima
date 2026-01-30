@@ -23,13 +23,13 @@ TRACES = [
 ]
 
 MULTI_CORE = [
-    ("8core", ["cc.sift", "dlrm.sift", "gc.sift", "rnd.sift", "bfs.sift", "sssp.sift", "gen.sift", "pr.sift"]),
-    ("4core_cc_dlrm_gc_rnd", ["cc.sift", "dlrm.sift", "gc.sift", "rnd.sift"]),
-    ("4core_bfs_sssp_gen_pr", ["bfs.sift", "sssp.sift", "gen.sift", "pr.sift"]),
-    ("2core_cc_rnd", ["cc.sift", "rnd.sift"]), 
-    ("2core_dlrm_rnd", ["dlrm.sift", "rnd.sift"]), 
-    ("2core_gc_rnd", ["gc.sift", "rnd.sift"]), 
-    ("2core_bfs_rnd", ["bfs.sift", "rnd.sift"])
+    # ("8core", ["cc.sift", "dlrm.sift", "gc.sift", "rnd.sift", "bfs.sift", "sssp.sift", "gen.sift", "pr.sift"]),
+    # ("4core_cc_dlrm_gc_rnd", ["cc.sift", "dlrm.sift", "gc.sift", "rnd.sift"]),
+    # ("4core_bfs_sssp_gen_pr", ["bfs.sift", "sssp.sift", "gen.sift", "pr.sift"]),
+    # ("2core_cc_rnd", ["cc.sift", "rnd.sift"]), 
+    # ("2core_dlrm_rnd", ["dlrm.sift", "rnd.sift"]), 
+    # ("2core_gc_rnd", ["gc.sift", "rnd.sift"]), 
+    # ("2core_bfs_rnd", ["bfs.sift", "rnd.sift"])
 ]
 
 DEFAULT_IMAGE = "docker.io/kanell21/artifact_evaluation:victima"
