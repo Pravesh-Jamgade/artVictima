@@ -22,15 +22,11 @@ TRACES = [
     ("gen", "gen.sift"),
 ]
 
-MULTI_CORE = [
-    # ("8core", ["cc.sift", "dlrm.sift", "gc.sift", "rnd.sift", "bfs.sift", "sssp.sift", "gen.sift", "pr.sift"]),
-    # ("4core_cc_dlrm_gc_rnd", ["cc.sift", "dlrm.sift", "gc.sift", "rnd.sift"]),
-    # ("4core_bfs_sssp_gen_pr", ["bfs.sift", "sssp.sift", "gen.sift", "pr.sift"]),
-    # ("2core_cc_rnd", ["cc.sift", "rnd.sift"]), 
-    # ("2core_dlrm_rnd", ["dlrm.sift", "rnd.sift"]), 
-    # ("2core_gc_rnd", ["gc.sift", "rnd.sift"]), 
-    # ("2core_bfs_rnd", ["bfs.sift", "rnd.sift"])
-]
+MULTICORE_WORKLOAD = {
+    "8": [["cc.sift", "dlrm.sift", "gc.sift", "rnd.sift", "bfs.sift", "sssp.sift", "gen.sift", "pr.sift"]],
+    "4": [["cc.sift", "dlrm.sift", "gc.sift", "rnd.sift"], ["bfs.sift", "sssp.sift", "gen.sift", "pr.sift"]],
+    "2": [["cc.sift", "rnd.sift"], ["dlrm.sift", "rnd.sift"], ["gc.sift", "rnd.sift"], ["bfs.sift", "rnd.sift"]]
+}
 
 DEFAULT_IMAGE = "docker.io/kanell21/artifact_evaluation:victima"
 SNIPER_COMMAND = "/app/sniper/run-sniper -s stop-by-icount:500000000 --genstats --power"
@@ -79,6 +75,111 @@ EXPERIMENT_CONFIGS = {
     "potm": {
         "config": "/app/sniper/config/virtual_memory_configs/potm.cfg",
         "label": "potm",
+    },
+}
+
+MULTI_CORE_EXPERIMENT_CONFIGS = {
+     ###################################################################
+    # 2 core Experiments
+    ###################################################################
+
+    "2core_baseline": {
+        "config": "/app/sniper/config/virtual_memory_configs/2core_radix.cfg",
+        "label": "2core_baseline",
+    },
+
+    "2core_perfect": {
+        "config": "/app/sniper/config/virtual_memory_configs/2core_perfecttlb.cfg",
+        "label": "2core_perfect",
+    },
+    
+    "2core_vikram_both": {
+        "config": "/app/sniper/config/virtual_memory_configs/2core_vikram_both.cfg",
+        "label": "2core_vikram_both",
+    },
+
+    "2core_victima": {
+        "config": "/app/sniper/config/virtual_memory_configs/2core_victima.cfg",
+        "label": "2core_victima",
+    },
+
+    "2core_utopia": {
+        "config": "/app/sniper/config/virtual_memory_configs/2core_utopia.cfg",
+        "label": "2core_utopia",
+    },
+
+    "2core_potm": {
+        "config": "/app/sniper/config/virtual_memory_configs/2core_potm.cfg",
+        "label": "2core_potm",
+    },
+
+
+     ###################################################################
+    # 4 core Experiments
+    ###################################################################
+
+    "4core_baseline": {
+        "config": "/app/sniper/config/virtual_memory_configs/4core_radix.cfg",
+        "label": "4core_baseline",
+    },
+
+    "4core_perfect": {
+        "config": "/app/sniper/config/virtual_memory_configs/4core_perfecttlb.cfg",
+        "label": "4core_perfect",
+    },
+    
+    "4core_vikram_both": {
+        "config": "/app/sniper/config/virtual_memory_configs/4core_vikram_both.cfg",
+        "label": "4core_vikram_both",
+    },
+
+    "4core_victima": {
+        "config": "/app/sniper/config/virtual_memory_configs/4core_victima.cfg",
+        "label": "4core_victima",
+    },
+
+    "4core_utopia": {
+        "config": "/app/sniper/config/virtual_memory_configs/4core_utopia.cfg",
+        "label": "4core_utopia",
+    },
+
+    "4core_potm": {
+        "config": "/app/sniper/config/virtual_memory_configs/4core_potm.cfg",
+        "label": "4core_potm",
+    },
+
+     ###################################################################
+    # 8 core Experiments
+    ###################################################################
+
+    "8core_baseline": {
+        "config": "/app/sniper/config/virtual_memory_configs/8core_radix.cfg",
+        "label": "8core_baseline",
+    },
+
+    "8core_perfect": {
+        "config": "/app/sniper/config/virtual_memory_configs/8core_perfecttlb.cfg",
+        "label": "8core_perfect",
+    },
+    
+    "8core_vikram_both": {
+        "config": "/app/sniper/config/virtual_memory_configs/8core_vikram_both.cfg",
+        "label": "8core_vikram_both",
+    },
+
+    "8core_victima": {
+        "config": "/app/sniper/config/virtual_memory_configs/8core_victima.cfg",
+        "label": "8core_victima",
+    },
+
+    "8core_utopia": {
+        "config": "/app/sniper/config/virtual_memory_configs/8core_utopia.cfg",
+        "label": "8core_utopia",
+    },
+
+    "8core_potm": {
+        "config": "/app/sniper/config/virtual_memory_configs/8core_potm.cfg",
+        "label": "8core_potm",
     },
 }
 
@@ -203,7 +304,6 @@ def csv_choices(value_string):
         "vikram_fetch",
         "vikram_ptb",
         "perfect",
-        "custom",
     ]
     values = [v.strip() for v in value_string.split(",")]
     for v in values:
@@ -254,6 +354,14 @@ def resolve_experiments(args: argparse.Namespace) -> List[Tuple[str, str]]:
         resolved.append((label, config_path))
     return resolved
 
+def resolve_multi_core_experiments(args: argparse.Namespace) -> List[Tuple[str, str, str]]:
+    resolved = []
+    for config_name, config_info in MULTI_CORE_EXPERIMENT_CONFIGS.items():
+        cores = config_name.split("core")[0]
+        label = f"{config_info['label']}"
+        config_path = args.config or config_info["config"]
+        resolved.append((cores, label, config_path))
+    return resolved
 
 def q(value):
     return f'\"{value}\"'
@@ -302,7 +410,13 @@ def build_commands(args: argparse.Namespace) -> List[Tuple[str, str]]:
 
             commands.append((command, job_label))
 
-        for trace_name, trace_list in MULTI_CORE:
+    for cores, experiment_label, config_path in resolve_multi_core_experiments(args):
+        experiment_root = Path(args.results_dir) / f"{cores}core" / experiment_label
+        experiment_root.mkdir(parents=True, exist_ok=True)
+        trace_group = MULTICORE_WORKLOAD[cores]
+
+        for trace_list in trace_group:
+            trace_name = "_".join([t.split(".")[0] for t in trace_list])
             output_dir = experiment_root / trace_name
             os.makedirs(output_dir, exist_ok=True)
 
