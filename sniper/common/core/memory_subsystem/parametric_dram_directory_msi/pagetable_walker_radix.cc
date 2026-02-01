@@ -567,10 +567,12 @@ namespace ParametricDramDirectoryMSI{
                             ? SubsecondTime::divideRounded(t_done - t_issue, core->getDvfsDomain()->getPeriod())
                             : 0;
                         if(pte_cycles > 0){
-                            UInt64 tail_cycles = (t_done > t_need)
-                                ? SubsecondTime::divideRounded(t_done - t_need, core->getDvfsDomain()->getPeriod())
+                            SubsecondTime t_complete = t_done;
+                            SubsecondTime t_ready = (t_complete < t_need) ? t_complete : t_need;
+                            UInt64 overlap_cycles = (t_complete > t_ready)
+                                ? SubsecondTime::divideRounded(t_complete - t_ready, core->getDvfsDomain()->getPeriod())
                                 : 0;
-                            UInt64 overlap_cycles = (pte_cycles > tail_cycles) ? (pte_cycles - tail_cycles) : 0;
+                            UInt64 tail_cycles = overlap_cycles;
                             UInt64 ratio_milli = static_cast<UInt64>((overlap_cycles * 1000ULL) / pte_cycles);
                             overlap_ratio_histogram.update(ratio_milli);
                             overlap_tail_latency_histogram.update(tail_cycles);
@@ -641,23 +643,52 @@ namespace ParametricDramDirectoryMSI{
                 && new_table->entries[a1].entry_type == ptw_table_entry_type::PTW_TABLE_POINTER
                 && new_table->entries[a1].next_level_table)
             {
+                CacheCntlr* prefetch_cache = cache;
+                if(mem_manager){
+                    switch (pd_hit_where){
+                        case HitWhere::L1_OWN:
+                            prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::L1_DCACHE);
+                            break;
+                        case HitWhere::L2_OWN:
+                            prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::L2_CACHE);
+                            break;
+                        case HitWhere::L3_OWN:
+                            prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::L3_CACHE);
+                            break;
+                        case HitWhere::L4_OWN:
+                            prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::L4_CACHE);
+                            break;
+                        case HitWhere::NUCA_CACHE:
+                            prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::LAST_LEVEL_CACHE);
+                            break;
+                        case HitWhere::DRAM:
+                        case HitWhere::DRAM_LOCAL:
+                        case HitWhere::DRAM_REMOTE:
+                        case HitWhere::DRAM_CACHE:
+                            prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::LAST_LEVEL_CACHE);
+                            break;
+                        case HitWhere::MISS:
+                        case HitWhere::CACHE_REMOTE:
+                        case HitWhere::SIBLING:
+                        case HitWhere::L1_SIBLING:
+                        case HitWhere::L2_SIBLING:
+                        case HitWhere::L3_SIBLING:
+                        case HitWhere::L4_SIBLING:
+                        default:
+                            prefetch_cache = cache;
+                            break;
+                    }
+                }
+                if(!prefetch_cache)
+                    prefetch_cache = cache;
                 std::vector<uint64_t> vpn_indices = computeVpnIndices(address);
                 uint64_t leaf_index = vpn_indices.back();
                 ptw_table* leaf_table = new_table->entries[a1].next_level_table;
                 IntPtr leaf_address = ((IntPtr)(&leaf_table->entries[leaf_index])) & (~((64 - 1)));
                 SubsecondTime prefetch_time = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
-                Core::mem_origin_t radix_origin = static_cast<Core::mem_origin_t>(level+1);
-                HitWhere::where_t res = cache->processMemOpFromCore(
-                    eip,
-                    lock_signal,
-                    Core::mem_op_t::READ,
-                    leaf_address, 0,
-                    data_buf, data_length,
-                    true,
-                    false, CacheBlockInfo::block_type_t::PAGE_TABLE, SubsecondTime::Zero(), nullptr, radix_origin);
-
-                    // std::cout << "PTW Level " << level << " Access Address: 0x" << std::hex << leaf_address 
-                    //               << " HitWhere: " << HitWhereString(res) << std::dec << std::endl;
+                prefetch_cache->enqueuePrefetch(leaf_address, prefetch_time);
+                prefetch_cache->Prefetch(eip, prefetch_time);
+                HitWhere::where_t res = HitWhere::UNKNOWN;
                 pwc->lookup(leaf_address, prefetch_time, true, level + 1, false);
 
                 SubsecondTime prefetch_done = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
