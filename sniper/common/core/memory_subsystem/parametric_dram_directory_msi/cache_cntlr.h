@@ -221,6 +221,7 @@ namespace ParametricDramDirectoryMSI
          bool m_l1_metadata_mshr;
 
          int metadata_passthrough_loc;
+         std::vector<bool> m_perfect_for_radix_level;
 
 
          struct {
