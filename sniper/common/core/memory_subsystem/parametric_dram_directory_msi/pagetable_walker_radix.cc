@@ -560,25 +560,37 @@ namespace ParametricDramDirectoryMSI{
                     if(count && overlap_prefetch_state.valid
                         && level == stats_radix.number_of_levels
                         && cache_address == overlap_prefetch_state.leaf_cache_line){
-                        SubsecondTime t_need = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
+                        
                         SubsecondTime t_issue = overlap_prefetch_state.t_issue;
-                        SubsecondTime t_done = overlap_prefetch_state.t_done;
+                        SubsecondTime t_done  = overlap_prefetch_state.t_done;
+                        SubsecondTime t_need  = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
+
+                        // total prefetch duration
                         UInt64 pte_cycles = (t_done > t_issue)
                             ? SubsecondTime::divideRounded(t_done - t_issue, core->getDvfsDomain()->getPeriod())
                             : 0;
-                        if(pte_cycles > 0){
-                            SubsecondTime t_complete = t_done;
-                            SubsecondTime t_ready = (t_complete < t_need) ? t_complete : t_need;
-                            UInt64 overlap_cycles = (t_complete > t_ready)
-                                ? SubsecondTime::divideRounded(t_complete - t_ready, core->getDvfsDomain()->getPeriod())
+
+                        if (pte_cycles > 0) {
+                            // overlap = portion completed before demand needs it
+                            SubsecondTime t_overlap_end = (t_need < t_done) ? t_need : t_done;
+                            UInt64 overlap_cycles = (t_overlap_end > t_issue)
+                                ? SubsecondTime::divideRounded(t_overlap_end - t_issue, core->getDvfsDomain()->getPeriod())
                                 : 0;
-                            UInt64 tail_cycles = overlap_cycles;
-                            UInt64 ratio_milli = static_cast<UInt64>((overlap_cycles * 1000ULL) / pte_cycles);
+
+                            // tail = remaining part after demand arrives (stall part)
+                            UInt64 tail_cycles = (t_done > t_need)
+                                ? SubsecondTime::divideRounded(t_done - t_need, core->getDvfsDomain()->getPeriod())
+                                : 0;
+
+                            // overlap ratio in milli-units
+                            UInt64 ratio_milli = (overlap_cycles * 1000ULL) / pte_cycles;
+
                             overlap_ratio_histogram.update(ratio_milli);
                             overlap_tail_latency_histogram.update(tail_cycles);
+
                             overlap_ratio_sum_milli += ratio_milli;
                             overlap_samples++;
-                            if(t_done <= t_need)
+                            if (t_done <= t_need)
                                 overlap_ready++;
                         }
                         overlap_prefetch_state.valid = false;
@@ -659,8 +671,7 @@ namespace ParametricDramDirectoryMSI{
                             prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::L4_CACHE);
                             break;
                         case HitWhere::NUCA_CACHE:
-                            prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::NUCA_CACHE);
-                            break;
+                        case HitWhere::CACHE_REMOTE:
                         case HitWhere::DRAM:
                         case HitWhere::DRAM_LOCAL:
                         case HitWhere::DRAM_REMOTE:
@@ -668,7 +679,6 @@ namespace ParametricDramDirectoryMSI{
                             prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::LAST_LEVEL_CACHE);
                             break;
                         case HitWhere::MISS:
-                        case HitWhere::CACHE_REMOTE:
                         case HitWhere::SIBLING:
                         case HitWhere::L1_SIBLING:
                         case HitWhere::L2_SIBLING:
@@ -688,12 +698,10 @@ namespace ParametricDramDirectoryMSI{
                 SubsecondTime prefetch_time = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
                 prefetch_cache->enqueuePrefetch(leaf_address, prefetch_time);
                 prefetch_cache->Prefetch(eip, prefetch_time);
-                HitWhere::where_t res = HitWhere::UNKNOWN;
                 pwc->lookup(leaf_address, prefetch_time, true, level + 1, false);
 
                 SubsecondTime prefetch_done = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
                 uint64_t delta = SubsecondTime::divideRounded(prefetch_done - prefetch_time, core->getDvfsDomain()->getPeriod());
-                prefeth_latency[res].update(delta);
                 if(count){
                     overlap_prefetch_state.valid = true;
                     overlap_prefetch_state.leaf_cache_line = leaf_address;
