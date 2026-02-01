@@ -304,7 +304,7 @@ namespace ParametricDramDirectoryMSI
 
          void copyDataFromNextLevel(Core::mem_op_t mem_op_type, IntPtr address, bool modeled, SubsecondTime t_start, CacheBlockInfo::block_type_t block_type);
          void trainPrefetcher(IntPtr eip, IntPtr address, Core::mem_op_t mem_op_type,  bool cache_hit, bool prefetch_hit, SubsecondTime t_issue);
-         void Prefetch(IntPtr eip, SubsecondTime t_start);
+         
          void doPrefetch(IntPtr eip, IntPtr prefetch_address, SubsecondTime t_start);
 
          // Cache meta-data operationsz
@@ -370,7 +370,7 @@ namespace ParametricDramDirectoryMSI
          CacheCntlr* lastLevelCache(void);
 
       public:
-
+            void Prefetch(IntPtr eip, SubsecondTime t_start);
          CacheCntlr(MemComponent::component_t mem_component,
                String name,
                core_id_t core_id,

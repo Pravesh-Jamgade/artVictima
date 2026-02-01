@@ -659,7 +659,7 @@ namespace ParametricDramDirectoryMSI{
                             prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::L4_CACHE);
                             break;
                         case HitWhere::NUCA_CACHE:
-                            prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::LAST_LEVEL_CACHE);
+                            prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::NUCA_CACHE);
                             break;
                         case HitWhere::DRAM:
                         case HitWhere::DRAM_LOCAL:

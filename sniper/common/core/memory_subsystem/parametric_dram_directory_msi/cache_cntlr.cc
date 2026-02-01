@@ -925,8 +925,8 @@ CacheCntlr::enqueuePrefetch(IntPtr address, SubsecondTime t_issue)
       return;
    if (!operationPermissibleinCache(address, Core::READ))
       m_master->m_prefetch_list.push_back(address);
-   if (m_master->m_prefetch_next == SubsecondTime::Zero())
-      m_master->m_prefetch_next = t_issue + PREFETCH_INTERVAL;
+   // if (m_master->m_prefetch_next == SubsecondTime::Zero())
+   //    m_master->m_prefetch_next = t_issue + PREFETCH_INTERVAL;
 }
 
 void

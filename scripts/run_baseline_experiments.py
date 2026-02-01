@@ -76,6 +76,33 @@ EXPERIMENT_CONFIGS = {
         "config": "/app/sniper/config/virtual_memory_configs/potm.cfg",
         "label": "potm",
     },
+
+    ##################################################
+
+    "virt_baseline": {
+        "config": "/app/sniper/config/virtual_memory_configs/virt_radix.cfg",
+        "label": "virt_baseline",
+    },
+    
+    "virt_vikram_both": {
+        "config": "/app/sniper/config/virtual_memory_configs/virt_vikram_both.cfg",
+        "label": "virt_vikram_both",
+    },
+
+    "virt_victima": {
+        "config": "/app/sniper/config/virtual_memory_configs/virt_victima.cfg",
+        "label": "virt_victima",
+    },
+
+    "virt_utopia": {
+        "config": "/app/sniper/config/virtual_memory_configs/virt_utopia.cfg",
+        "label": "virt_utopia",
+    },
+
+    "virt_potm": {
+        "config": "/app/sniper/config/virtual_memory_configs/virt_potm.cfg",
+        "label": "virt_potm",
+    },
 }
 
 MULTI_CORE_EXPERIMENT_CONFIGS = {
@@ -304,7 +331,14 @@ def csv_choices(value_string):
         "vikram_fetch",
         "vikram_ptb",
         "perfect",
+
+        "virt_baseline",
+        "virt_victima",
+        "virt_utopia",
+        "virt_potm",
+        "virt_vikram_both",
     ]
+
     values = [v.strip() for v in value_string.split(",")]
     for v in values:
         if v not in choices:
@@ -341,7 +375,13 @@ def resolve_experiments(args: argparse.Namespace) -> List[Tuple[str, str]]:
             "vikram_both",
             "vikram_fetch",
             "vikram_ptb",
-            "perfect"
+            "perfect",
+
+            "virt_baseline",
+            "virt_victima",
+            "virt_utopia",
+            "virt_potm",
+            "virt_vikram_both",
         ]
     else:
         keys = parse_string_experiments(args.experiment)
@@ -356,12 +396,16 @@ def resolve_experiments(args: argparse.Namespace) -> List[Tuple[str, str]]:
 
 def resolve_multi_core_experiments(args: argparse.Namespace) -> List[Tuple[str, str, str]]:
     resolved = []
-    for config_name, config_info in MULTI_CORE_EXPERIMENT_CONFIGS.items():
-        cores = config_name.split("core")[0]
-        label = f"{config_info['label']}"
-        config_path = args.config or config_info["config"]
-        resolved.append((cores, label, config_path))
-    return resolved
+    keys = parse_string_experiments(args.experiment)
+    for key in keys:
+        if key not in MULTI_CORE_EXPERIMENT_CONFIGS:
+            continue
+        for config_name, config_info in MULTI_CORE_EXPERIMENT_CONFIGS.items():
+            cores = config_name.split("core")[0]
+            label = f"{config_info['label']}"
+            config_path = args.config or config_info["config"]
+            resolved.append((cores, label, config_path))
+        return resolved
 
 def q(value):
     return f'\"{value}\"'
@@ -410,7 +454,10 @@ def build_commands(args: argparse.Namespace) -> List[Tuple[str, str]]:
 
             commands.append((command, job_label))
 
-    for cores, experiment_label, config_path in resolve_multi_core_experiments(args):
+    multicore_jobs = resolve_multi_core_experiments(args)
+    if not multicore_jobs:
+        return commands
+    for cores, experiment_label, config_path in multicore_jobs:
         experiment_root = Path(args.results_dir) / f"{cores}core" / experiment_label
         experiment_root.mkdir(parents=True, exist_ok=True)
         trace_group = MULTICORE_WORKLOAD[cores]
