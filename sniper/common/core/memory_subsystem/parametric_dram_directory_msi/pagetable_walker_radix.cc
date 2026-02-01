@@ -701,6 +701,21 @@ namespace ParametricDramDirectoryMSI{
         ptb_pdpt_combo_counts[ptb_index][pdpt_index]++;
     }
 
+    void PageTableWalkerRadix::snapshotPscStats(std::vector<UInt64> &hits,
+                                                std::vector<UInt64> &misses,
+                                                std::vector<std::array<UInt64, HitWhere::NUM_HITWHERES>> &hitwhere) const{
+        hits = psc_hits_per_level;
+        misses = psc_misses_per_level;
+        hitwhere.assign(psc_miss_hit_where_counts.size(), {});
+        for (size_t level = 0; level < psc_miss_hit_where_counts.size(); ++level){
+            hitwhere[level].fill(0);
+            const auto &map = hit_where_histograms[level];
+            for (const auto &entry : map){
+                hitwhere[level][entry.first] = entry.second;
+            }
+        }
+    }
+
     void PageTableWalkerRadix::updatePscCombinationState(PscCombinationState *psc_state, int level_index, bool hit, HitWhere::where_t hit_where, bool has_hitwhere){
         if(!psc_state)
             return;
