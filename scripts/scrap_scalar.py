@@ -5,21 +5,25 @@ from pathlib import Path
 import sys
 from typing import List, Dict, Optional, Tuple
 
-# Regex to check if a line is a header definition line
+# # Regex to check if a line is a header definition line
+# scrap = [
+#     "proposed_STLB_miss_CPI,",
+#     "proposed_STLB_miss_avg_stall_cycles,",
+#     "proposed_STLB_miss_walks,",
+#     "proposed_PSC_miss_rate_pct,",
+#     "proposed_PSC_misses,",
+#     "proposed_PSC_accesses,",
+#     "proposed_PSC_L1_hits,"
+#     "proposed_PSC_L1_misses,",
+#     "proposed_PSC_L2_hits,",
+#     "proposed_PSC_L2_misses,",
+#     "proposed_PSC_L3_hits,",
+#     "proposed_PSC_L3_misses,",
+#     "proposed_PTB_latency_share_pct,0.00"
+# ]
+
 scrap = [
-    "proposed_STLB_miss_CPI,",
     "proposed_STLB_miss_avg_stall_cycles,",
-    "proposed_STLB_miss_walks,",
-    "proposed_PSC_miss_rate_pct,",
-    "proposed_PSC_misses,",
-    "proposed_PSC_accesses,",
-    "proposed_PSC_L1_hits,"
-    "proposed_PSC_L1_misses,",
-    "proposed_PSC_L2_hits,",
-    "proposed_PSC_L2_misses,",
-    "proposed_PSC_L3_hits,",
-    "proposed_PSC_L3_misses,",
-    "proposed_PTB_latency_share_pct,0.00"
 ]
 
 def path_tag(file_path: Path) -> str: 

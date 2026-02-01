@@ -422,9 +422,8 @@ namespace ParametricDramDirectoryMSI{
                         cache_address, 0,
                         data_buf, data_length,
                         modeled,
-                        count, CacheBlockInfo::block_type_t::PAGE_TABLE, SubsecondTime::Zero(),shadow_cache);
-
-
+                        count, CacheBlockInfo::block_type_t::PAGE_TABLE, SubsecondTime::Zero(),shadow_cache, Core::mem_origin_t::PML4_ACCESS); 
+                    
                     addresses.push_back((IntPtr)(&starting_table->entries[a1]));
 
                     SubsecondTime t_end = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
@@ -534,6 +533,11 @@ namespace ParametricDramDirectoryMSI{
                     if( pwc_where == PWC::HIT ) pwc_hit = true; 
 
                 }
+                
+                if(level == (stats_radix.number_of_levels))
+                {
+                    pwc_hit = pwc->isPerfect();
+                }
             }
 		
             if(pwc_hit == true){
@@ -550,7 +554,6 @@ namespace ParametricDramDirectoryMSI{
                         recordPtbPdptCombo(ptb_hit, true);
             }
             else{
-                    
                     t_start = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
                     
                     IntPtr cache_address = ((IntPtr)(&new_table->entries[a1])) & (~((64 - 1))); 
@@ -579,6 +582,8 @@ namespace ParametricDramDirectoryMSI{
                         overlap_prefetch_state.valid = false;
                     }
 
+                    Core::mem_origin_t radix_origin = static_cast<Core::mem_origin_t>(level);
+
                     HitWhere::where_t hit_where = cache->processMemOpFromCore(
                         eip,
                         lock_signal,
@@ -586,7 +591,10 @@ namespace ParametricDramDirectoryMSI{
                         cache_address, 0,
                         data_buf, data_length,
                         modeled,
-                        count, CacheBlockInfo::block_type_t::PAGE_TABLE, SubsecondTime::Zero());
+                        count, CacheBlockInfo::block_type_t::PAGE_TABLE, SubsecondTime::Zero(), nullptr, radix_origin);
+
+                        // std::cout << "PTW Level " << level << " Access Address: 0x" << std::hex << cache_address 
+                        //           << " HitWhere: " << HitWhereString(hit_where) << std::dec << std::endl;
 
                     SubsecondTime t_end = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
                     
@@ -633,53 +641,23 @@ namespace ParametricDramDirectoryMSI{
                 && new_table->entries[a1].entry_type == ptw_table_entry_type::PTW_TABLE_POINTER
                 && new_table->entries[a1].next_level_table)
             {
-                CacheCntlr* prefetch_cache = cache;
-                if(mem_manager){
-                    switch (pd_hit_where){
-                        case HitWhere::L1_OWN:
-                            prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::L1_DCACHE);
-                            break;
-                        case HitWhere::L2_OWN:
-                            prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::L2_CACHE);
-                            break;
-                        case HitWhere::L3_OWN:
-                            prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::L3_CACHE);
-                            break;
-                        case HitWhere::L4_OWN:
-                            prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::L4_CACHE);
-                            break;
-                        case HitWhere::DRAM:
-                        case HitWhere::DRAM_LOCAL:
-                        case HitWhere::DRAM_REMOTE:
-                        case HitWhere::DRAM_CACHE:
-                        case HitWhere::MISS:
-                        case HitWhere::NUCA_CACHE:
-                        case HitWhere::CACHE_REMOTE:
-                        case HitWhere::SIBLING:
-                        case HitWhere::L1_SIBLING:
-                        case HitWhere::L2_SIBLING:
-                        case HitWhere::L3_SIBLING:
-                        case HitWhere::L4_SIBLING:
-                        default:
-                            prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::LAST_LEVEL_CACHE);
-                            break;
-                    }
-                }
-                if(!prefetch_cache)
-                    prefetch_cache = cache;
                 std::vector<uint64_t> vpn_indices = computeVpnIndices(address);
                 uint64_t leaf_index = vpn_indices.back();
                 ptw_table* leaf_table = new_table->entries[a1].next_level_table;
                 IntPtr leaf_address = ((IntPtr)(&leaf_table->entries[leaf_index])) & (~((64 - 1)));
                 SubsecondTime prefetch_time = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
-                HitWhere::where_t res = prefetch_cache->processMemOpFromCore(
+                Core::mem_origin_t radix_origin = static_cast<Core::mem_origin_t>(level+1);
+                HitWhere::where_t res = cache->processMemOpFromCore(
                     eip,
                     lock_signal,
                     Core::mem_op_t::READ,
                     leaf_address, 0,
                     data_buf, data_length,
                     true,
-                    false, CacheBlockInfo::block_type_t::PAGE_TABLE, SubsecondTime::Zero());
+                    false, CacheBlockInfo::block_type_t::PAGE_TABLE, SubsecondTime::Zero(), nullptr, radix_origin);
+
+                    // std::cout << "PTW Level " << level << " Access Address: 0x" << std::hex << leaf_address 
+                    //               << " HitWhere: " << HitWhereString(res) << std::dec << std::endl;
                 pwc->lookup(leaf_address, prefetch_time, true, level + 1, false);
 
                 SubsecondTime prefetch_done = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
@@ -907,7 +885,7 @@ namespace ParametricDramDirectoryMSI{
         double cpi_on_stlb_miss = 1.0 + stall_cycles_per_instruction;
         double avg_stall_cycles = walks ? static_cast<double>(SubsecondTime::divideRounded(total_walk_latency, period)) / walks : 0.0;
 
-        String stats_output_path = Sim()->getConfig()->formatOutputFileName("proposed.stats");
+        String stats_output_path = Sim()->getConfig()->formatOutputFileName(String(("proposed"+std::to_string(core_id)+".stats").c_str()));
         FILE *stats_fp = fopen(stats_output_path.c_str(), "a");
         if(stats_fp){
             fprintf(stats_fp, "[Core %d] proposed STLB miss CPI: %.4f (stall cycles per instruction %.6f over %" PRIu64 " instructions)\n",
@@ -1001,7 +979,7 @@ namespace ParametricDramDirectoryMSI{
             fclose(stats_fp);
         }
 
-        String csv_output_path = Sim()->getConfig()->formatOutputFileName("proposed.csv");
+        String csv_output_path = Sim()->getConfig()->formatOutputFileName(String(("proposed"+std::to_string(core_id)+".csv").c_str()));
         FILE *csv_fp = fopen(csv_output_path.c_str(), "a");
         if(csv_fp){
             fprintf(csv_fp, "proposed_STLB_miss_CPI,%.4f\n", cpi_on_stlb_miss);
