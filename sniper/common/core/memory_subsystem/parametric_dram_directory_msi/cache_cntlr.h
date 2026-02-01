@@ -401,6 +401,7 @@ namespace ParametricDramDirectoryMSI
                bool modeled,
                bool count,CacheBlockInfo::block_type_t block_type,SubsecondTime TLB_latency,UtopiaCache *shadow_cache = NULL,
                Core::mem_origin_t mem_origin = Core::mem_origin_t::NORMAL);
+         void enqueuePrefetch(IntPtr address, SubsecondTime t_issue);
          void updateHits(Core::mem_op_t mem_op_type, UInt64 hits);
 
          // Notify next level cache of so it can update its sharing set
