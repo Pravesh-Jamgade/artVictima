@@ -918,6 +918,18 @@ CacheCntlr::trainPrefetcher(IntPtr eip, IntPtr address, Core::mem_op_t mem_op_ty
 }
 
 void
+CacheCntlr::enqueuePrefetch(IntPtr address, SubsecondTime t_issue)
+{
+   ScopedLock sl(getLock());
+   if (m_master->m_prefetch_list.size() > PREFETCH_MAX_QUEUE_LENGTH)
+      return;
+   if (!operationPermissibleinCache(address, Core::READ))
+      m_master->m_prefetch_list.push_back(address);
+   // if (m_master->m_prefetch_next == SubsecondTime::Zero())
+   //    m_master->m_prefetch_next = t_issue + PREFETCH_INTERVAL;
+}
+
+void
 CacheCntlr::Prefetch(IntPtr eip,SubsecondTime t_now)
 {
    IntPtr address_to_prefetch = INVALID_ADDRESS;
