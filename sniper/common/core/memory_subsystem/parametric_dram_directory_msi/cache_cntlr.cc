@@ -917,16 +917,25 @@ CacheCntlr::trainPrefetcher(IntPtr eip, IntPtr address, Core::mem_op_t mem_op_ty
    }
 }
 
-void
+bool
 CacheCntlr::enqueuePrefetch(IntPtr address, SubsecondTime t_issue)
 {
    ScopedLock sl(getLock());
    if (m_master->m_prefetch_list.size() > PREFETCH_MAX_QUEUE_LENGTH)
-      return;
+      return false;
    if (!operationPermissibleinCache(address, Core::READ))
       m_master->m_prefetch_list.push_back(address);
    if (m_master->m_prefetch_next == SubsecondTime::Zero())
       m_master->m_prefetch_next = t_issue + PREFETCH_INTERVAL;
+   
+   // record early fetch metadata
+   assert(early_fetch_metadata.enabled);
+   if(early_fetch_metadata.enabled == false){
+      early_fetch_metadata.m_last_prefetch_issue = m_master->m_prefetch_next;
+      early_fetch_metadata.last_address = address;
+   }
+   
+   return true;
 }
 
 void
@@ -992,6 +1001,11 @@ CacheCntlr::doPrefetch(IntPtr eip, IntPtr prefetch_address, SubsecondTime t_star
    }
 
    m_last_prefetch_done = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
+   if(early_fetch_metadata.enabled && early_fetch_metadata.last_address == prefetch_address){
+      early_fetch_metadata.m_last_prefetch_done = m_last_prefetch_done;
+      early_fetch_metadata.hit_where = hit_where;
+   }
+   
    getShmemPerfModel()->setElapsedTime(ShmemPerfModel::_USER_THREAD, t_before); // Ignore changes to time made by the prefetch call
    releaseStackLock(prefetch_address);
 }

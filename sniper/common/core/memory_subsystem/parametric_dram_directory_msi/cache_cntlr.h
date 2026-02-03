@@ -44,6 +44,14 @@ class ShmemPerf;
 
 namespace ParametricDramDirectoryMSI
 {
+   struct EarlyFetchMetadata{
+            public:
+            bool enabled = false;
+            IntPtr last_address = 0;
+            SubsecondTime m_last_prefetch_issue = SubsecondTime::Zero();
+            SubsecondTime m_last_prefetch_done = SubsecondTime::Zero();
+            HitWhere::where_t hit_where = HitWhere::UNKNOWN;
+         };
    class Transition
    {
       public:
@@ -219,6 +227,8 @@ namespace ParametricDramDirectoryMSI
          bool m_prefetch_on_prefetch_hit;
          bool m_l1_mshr;
          bool m_l1_metadata_mshr;
+
+         EarlyFetchMetadata early_fetch_metadata;
          SubsecondTime m_last_prefetch_issue;
          SubsecondTime m_last_prefetch_done;
 
@@ -387,6 +397,11 @@ namespace ParametricDramDirectoryMSI
 
          virtual ~CacheCntlr();
 
+         EarlyFetchMetadata get_prefetch_metadata(IntPtr address){
+            early_fetch_metadata.enabled = false;
+            return early_fetch_metadata;
+         }
+
          Cache* getCache() { return m_master->m_cache; }
          Lock& getLock() { return m_master->m_cache_lock; }
 
@@ -404,7 +419,7 @@ namespace ParametricDramDirectoryMSI
                bool modeled,
                bool count,CacheBlockInfo::block_type_t block_type,SubsecondTime TLB_latency,UtopiaCache *shadow_cache = NULL,
                Core::mem_origin_t mem_origin = Core::mem_origin_t::NORMAL);
-         void enqueuePrefetch(IntPtr address, SubsecondTime t_issue);
+         bool enqueuePrefetch(IntPtr address, SubsecondTime t_issue);
          SubsecondTime getLastPrefetchIssue() const { return m_last_prefetch_issue; }
          SubsecondTime getLastPrefetchDone() const { return m_last_prefetch_done; }
          void updateHits(Core::mem_op_t mem_op_type, UInt64 hits);

@@ -20,7 +20,7 @@
 
 
 namespace ParametricDramDirectoryMSI{
-
+   
     static constexpr uint64_t TAIL_START = 128;
     static constexpr uint64_t TAIL_END   = 2048;   // exclusive
     static constexpr uint64_t TAIL_W     = 32;
@@ -53,7 +53,6 @@ namespace ParametricDramDirectoryMSI{
     class PageTableWalkerRadix: public PageTableWalker{
 
             public:
-
                 struct{
                     int number_of_levels;
                     int *address_bit_indices;

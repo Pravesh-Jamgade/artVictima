@@ -682,31 +682,32 @@ namespace ParametricDramDirectoryMSI{
                             break;
                     }
                 }
-                if(!prefetch_cache)
-                    prefetch_cache = cache;
+                assert(!prefetch_cache);
                 std::vector<uint64_t> vpn_indices = computeVpnIndices(address);
                 uint64_t leaf_index = vpn_indices.back();
                 ptw_table* leaf_table = new_table->entries[a1].next_level_table;
                 IntPtr leaf_address = ((IntPtr)(&leaf_table->entries[leaf_index])) & (~((64 - 1)));
                 SubsecondTime prefetch_time = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
-                prefetch_cache->enqueuePrefetch(leaf_address, prefetch_time);
-                prefetch_cache->Prefetch(eip, prefetch_time);
-                SubsecondTime prefetch_issue = prefetch_cache->getLastPrefetchIssue();
-                SubsecondTime prefetch_done = prefetch_cache->getLastPrefetchDone();
-                HitWhere::where_t res = HitWhere::UNKNOWN;
-                pwc->lookup(leaf_address, prefetch_time, true, level + 1, false);
+                bool pushed = prefetch_cache->enqueuePrefetch(leaf_address, prefetch_time);
+                if(pushed)
+                {   
+                    prefetch_cache->Prefetch(eip, prefetch_time);
+                    EarlyFetchMetadata early_fetch_metadata = prefetch_cache->get_prefetch_metadata(leaf_address);
+                    pwc->lookup(leaf_address, prefetch_time, true, level + 1, false);
 
-                uint64_t delta = (prefetch_done > prefetch_issue)
-                    ? SubsecondTime::divideRounded(prefetch_done - prefetch_issue, core->getDvfsDomain()->getPeriod())
-                    : 0;
-                prefeth_latency[res].update(delta);
-                if(count){
-                    overlap_prefetch_state.valid = true;
-                    overlap_prefetch_state.leaf_cache_line = leaf_address;
-                    overlap_prefetch_state.t_issue = prefetch_issue;
-                    overlap_prefetch_state.t_done = prefetch_done;
+                    SubsecondTime prefetch_issue = early_fetch_metadata.m_last_prefetch_issue;
+                    SubsecondTime prefetch_done = early_fetch_metadata.m_last_prefetch_done;
+                    uint64_t delta = (prefetch_done > prefetch_issue)
+                        ? SubsecondTime::divideRounded(prefetch_done - prefetch_issue, core->getDvfsDomain()->getPeriod())
+                        : 0;
+                    prefeth_latency[early_fetch_metadata.hit_where].update(delta);
+                    if(count){
+                        overlap_prefetch_state.valid = true;
+                        overlap_prefetch_state.leaf_cache_line = leaf_address;
+                        overlap_prefetch_state.t_issue = prefetch_issue;
+                        overlap_prefetch_state.t_done = prefetch_done;
+                    }
                 }
-
                 m_shmem_perf_model->setElapsedTime(ShmemPerfModel::_USER_THREAD, prefetch_time);
             }
 
