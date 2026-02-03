@@ -925,8 +925,8 @@ CacheCntlr::enqueuePrefetch(IntPtr address, SubsecondTime t_issue)
       return;
    if (!operationPermissibleinCache(address, Core::READ))
       m_master->m_prefetch_list.push_back(address);
-   // if (m_master->m_prefetch_next == SubsecondTime::Zero())
-   //    m_master->m_prefetch_next = t_issue + PREFETCH_INTERVAL;
+   if (m_master->m_prefetch_next == SubsecondTime::Zero())
+      m_master->m_prefetch_next = t_issue + PREFETCH_INTERVAL;
 }
 
 void
@@ -971,6 +971,7 @@ void
 CacheCntlr::doPrefetch(IntPtr eip, IntPtr prefetch_address, SubsecondTime t_start)
 {
    ++stats.prefetches;
+   m_last_prefetch_issue = t_start;
    acquireStackLock(prefetch_address);
    MYLOG("prefetching %lx", prefetch_address);
    SubsecondTime t_before = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
@@ -990,6 +991,7 @@ CacheCntlr::doPrefetch(IntPtr eip, IntPtr prefetch_address, SubsecondTime t_star
       LOG_ASSERT_ERROR(hit_where != HitWhere::MISS, "Line was not there after prefetch");
    }
 
+   m_last_prefetch_done = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
    getShmemPerfModel()->setElapsedTime(ShmemPerfModel::_USER_THREAD, t_before); // Ignore changes to time made by the prefetch call
    releaseStackLock(prefetch_address);
 }
