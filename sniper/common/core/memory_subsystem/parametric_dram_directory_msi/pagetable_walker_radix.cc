@@ -422,9 +422,8 @@ namespace ParametricDramDirectoryMSI{
                         cache_address, 0,
                         data_buf, data_length,
                         modeled,
-                        count, CacheBlockInfo::block_type_t::PAGE_TABLE, SubsecondTime::Zero(),shadow_cache);
-
-
+                        count, CacheBlockInfo::block_type_t::PAGE_TABLE, SubsecondTime::Zero(),shadow_cache, Core::mem_origin_t::PML4_ACCESS); 
+                    
                     addresses.push_back((IntPtr)(&starting_table->entries[a1]));
 
                     SubsecondTime t_end = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
@@ -534,6 +533,11 @@ namespace ParametricDramDirectoryMSI{
                     if( pwc_where == PWC::HIT ) pwc_hit = true; 
 
                 }
+                
+                if(level == (stats_radix.number_of_levels))
+                {
+                    pwc_hit = pwc->isPerfect();
+                }
             }
 		
             if(pwc_hit == true){
@@ -550,7 +554,6 @@ namespace ParametricDramDirectoryMSI{
                         recordPtbPdptCombo(ptb_hit, true);
             }
             else{
-                    
                     t_start = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
                     
                     IntPtr cache_address = ((IntPtr)(&new_table->entries[a1])) & (~((64 - 1))); 
@@ -582,6 +585,8 @@ namespace ParametricDramDirectoryMSI{
                         overlap_prefetch_state.valid = false;
                     }
 
+                    Core::mem_origin_t radix_origin = static_cast<Core::mem_origin_t>(level);
+
                     HitWhere::where_t hit_where = cache->processMemOpFromCore(
                         eip,
                         lock_signal,
@@ -589,7 +594,10 @@ namespace ParametricDramDirectoryMSI{
                         cache_address, 0,
                         data_buf, data_length,
                         modeled,
-                        count, CacheBlockInfo::block_type_t::PAGE_TABLE, SubsecondTime::Zero());
+                        count, CacheBlockInfo::block_type_t::PAGE_TABLE, SubsecondTime::Zero(), nullptr, radix_origin);
+
+                        // std::cout << "PTW Level " << level << " Access Address: 0x" << std::hex << cache_address 
+                        //           << " HitWhere: " << HitWhereString(hit_where) << std::dec << std::endl;
 
                     SubsecondTime t_end = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
                     
@@ -652,7 +660,7 @@ namespace ParametricDramDirectoryMSI{
                             prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::L4_CACHE);
                             break;
                         case HitWhere::NUCA_CACHE:
-                            prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::LAST_LEVEL_CACHE);
+                            prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::NUCA_CACHE);
                             break;
                         case HitWhere::DRAM:
                         case HitWhere::DRAM_LOCAL:
@@ -912,7 +920,7 @@ namespace ParametricDramDirectoryMSI{
         double cpi_on_stlb_miss = 1.0 + stall_cycles_per_instruction;
         double avg_stall_cycles = walks ? static_cast<double>(SubsecondTime::divideRounded(total_walk_latency, period)) / walks : 0.0;
 
-        String stats_output_path = Sim()->getConfig()->formatOutputFileName("proposed.stats");
+        String stats_output_path = Sim()->getConfig()->formatOutputFileName(String(("proposed"+std::to_string(core_id)+".stats").c_str()));
         FILE *stats_fp = fopen(stats_output_path.c_str(), "a");
         if(stats_fp){
             fprintf(stats_fp, "[Core %d] proposed STLB miss CPI: %.4f (stall cycles per instruction %.6f over %" PRIu64 " instructions)\n",
@@ -1006,7 +1014,7 @@ namespace ParametricDramDirectoryMSI{
             fclose(stats_fp);
         }
 
-        String csv_output_path = Sim()->getConfig()->formatOutputFileName("proposed.csv");
+        String csv_output_path = Sim()->getConfig()->formatOutputFileName(String(("proposed"+std::to_string(core_id)+".csv").c_str()));
         FILE *csv_fp = fopen(csv_output_path.c_str(), "a");
         if(csv_fp){
             fprintf(csv_fp, "proposed_STLB_miss_CPI,%.4f\n", cpi_on_stlb_miss);

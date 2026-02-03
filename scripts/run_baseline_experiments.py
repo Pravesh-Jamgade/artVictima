@@ -22,36 +22,45 @@ TRACES = [
     ("gen", "gen.sift"),
 ]
 
+MULTICORE_WORKLOAD = {
+    "8": [["cc.sift", "dlrm.sift", "gc.sift", "rnd.sift", "bfs.sift", "sssp.sift", "gen.sift", "pr.sift"]],
+    "4": [["cc.sift", "dlrm.sift", "gc.sift", "rnd.sift"], ["bfs.sift", "sssp.sift", "gen.sift", "pr.sift"]],
+    "2": [["cc.sift", "rnd.sift"], ["dlrm.sift", "rnd.sift"], ["gc.sift", "rnd.sift"], ["bfs.sift", "rnd.sift"]]
+}
+
 DEFAULT_IMAGE = "docker.io/kanell21/artifact_evaluation:victima"
 SNIPER_COMMAND = "/app/sniper/run-sniper -s stop-by-icount:500000000 --genstats --power"
 
 EXPERIMENT_CONFIGS = {
-     "baseline": {
+    "baseline": {
         "config": "/app/sniper/config/virtual_memory_configs/radix.cfg",
         "label": "baseline",
+    },
+
+    "radix_perfect_pwc": {
+        "config": "/app/sniper/config/virtual_memory_configs/radix_perfect_pwc.cfg",
+        "label": "radix_perfect_pwc",
     },
 
     "perfect": {
         "config": "/app/sniper/config/virtual_memory_configs/perfecttlb.cfg",
         "label": "perfect",
     },
+    
+    "vikram_both": {
+        "config": "/app/sniper/config/virtual_memory_configs/vikram_both.cfg",
+        "label": "vikram_both",
+    },
 
-    # "baseline-virtualized": {
-    #     "config": "/app/sniper/config/virtual_memory_configs/virtualized.cfg",
-    #     "label": "baseline_virtual",
-    # },
-    "ptb": {
-        "config": "/app/sniper/config/virtual_memory_configs/ptb.cfg",
-        "label": "ptb",
+    "vikram_fetch": {
+        "config": "/app/sniper/config/virtual_memory_configs/vikram_fetch.cfg",
+        "label": "vikram_fetch",
     },
-    "ptb-pd": {
-        "config": "/app/sniper/config/virtual_memory_configs/ptbpd.cfg",
-        "label": "ptb-pd",
+
+    "vikram_ptb": {
+        "config": "/app/sniper/config/virtual_memory_configs/vikram_ptb.cfg",
+        "label": "vikram_ptb",
     },
-    # "ptb-virtualized": {
-    #     "config": "/app/sniper/config/virtual_memory_configs/ptb_virtual.cfg",
-    #     "label": "ptb_virtual",
-    # },
 
     "victima": {
         "config": "/app/sniper/config/virtual_memory_configs/victima.cfg",
@@ -68,10 +77,137 @@ EXPERIMENT_CONFIGS = {
         "label": "potm",
     },
 
-    # "victima-virtualized": {
-    #     "config": "/app/sniper/config/virtual_memory_configs/victima_virtual.cfg",
-    #     "label": "victima_virtual",
-    # },
+    ##################################################
+
+    "virt_baseline": {
+        "config": "/app/sniper/config/virtual_memory_configs/virt_radix.cfg",
+        "label": "virt_baseline",
+    },
+    
+    "virt_vikram_both": {
+        "config": "/app/sniper/config/virtual_memory_configs/virt_vikram_both.cfg",
+        "label": "virt_vikram_both",
+    },
+
+    "virt_victima": {
+        "config": "/app/sniper/config/virtual_memory_configs/virt_victima.cfg",
+        "label": "virt_victima",
+    },
+
+    "virt_utopia": {
+        "config": "/app/sniper/config/virtual_memory_configs/virt_utopia.cfg",
+        "label": "virt_utopia",
+    },
+
+    "virt_potm": {
+        "config": "/app/sniper/config/virtual_memory_configs/virt_potm.cfg",
+        "label": "virt_potm",
+    },
+}
+
+MULTI_CORE_EXPERIMENT_CONFIGS = {
+     ###################################################################
+    # 2 core Experiments
+    ###################################################################
+
+    "2core_baseline": {
+        "config": "/app/sniper/config/virtual_memory_configs/2core_radix.cfg",
+        "label": "2core_baseline",
+    },
+
+    "2core_perfect": {
+        "config": "/app/sniper/config/virtual_memory_configs/2core_perfecttlb.cfg",
+        "label": "2core_perfect",
+    },
+    
+    "2core_vikram_both": {
+        "config": "/app/sniper/config/virtual_memory_configs/2core_vikram_both.cfg",
+        "label": "2core_vikram_both",
+    },
+
+    "2core_victima": {
+        "config": "/app/sniper/config/virtual_memory_configs/2core_victima.cfg",
+        "label": "2core_victima",
+    },
+
+    "2core_utopia": {
+        "config": "/app/sniper/config/virtual_memory_configs/2core_utopia.cfg",
+        "label": "2core_utopia",
+    },
+
+    "2core_potm": {
+        "config": "/app/sniper/config/virtual_memory_configs/2core_potm.cfg",
+        "label": "2core_potm",
+    },
+
+
+     ###################################################################
+    # 4 core Experiments
+    ###################################################################
+
+    "4core_baseline": {
+        "config": "/app/sniper/config/virtual_memory_configs/4core_radix.cfg",
+        "label": "4core_baseline",
+    },
+
+    "4core_perfect": {
+        "config": "/app/sniper/config/virtual_memory_configs/4core_perfecttlb.cfg",
+        "label": "4core_perfect",
+    },
+    
+    "4core_vikram_both": {
+        "config": "/app/sniper/config/virtual_memory_configs/4core_vikram_both.cfg",
+        "label": "4core_vikram_both",
+    },
+
+    "4core_victima": {
+        "config": "/app/sniper/config/virtual_memory_configs/4core_victima.cfg",
+        "label": "4core_victima",
+    },
+
+    "4core_utopia": {
+        "config": "/app/sniper/config/virtual_memory_configs/4core_utopia.cfg",
+        "label": "4core_utopia",
+    },
+
+    "4core_potm": {
+        "config": "/app/sniper/config/virtual_memory_configs/4core_potm.cfg",
+        "label": "4core_potm",
+    },
+
+     ###################################################################
+    # 8 core Experiments
+    ###################################################################
+
+    "8core_baseline": {
+        "config": "/app/sniper/config/virtual_memory_configs/8core_radix.cfg",
+        "label": "8core_baseline",
+    },
+
+    "8core_perfect": {
+        "config": "/app/sniper/config/virtual_memory_configs/8core_perfecttlb.cfg",
+        "label": "8core_perfect",
+    },
+    
+    "8core_vikram_both": {
+        "config": "/app/sniper/config/virtual_memory_configs/8core_vikram_both.cfg",
+        "label": "8core_vikram_both",
+    },
+
+    "8core_victima": {
+        "config": "/app/sniper/config/virtual_memory_configs/8core_victima.cfg",
+        "label": "8core_victima",
+    },
+
+    "8core_utopia": {
+        "config": "/app/sniper/config/virtual_memory_configs/8core_utopia.cfg",
+        "label": "8core_utopia",
+    },
+
+    "8core_potm": {
+        "config": "/app/sniper/config/virtual_memory_configs/8core_potm.cfg",
+        "label": "8core_potm",
+    },
 }
 
 # "baseline": {
@@ -187,17 +323,22 @@ def csv_choices(value_string):
     choices = [
         "all",
         "baseline",
-        "baseline-virtualized",
-        "ptb",
-        "ptb-virtualized",
-        "ptb-pd",
+        "radix_perfect_pwc",
         "victima",
-        "victima-virtualized",
         "utopia",
         "potm",
+        "vikram_both",
+        "vikram_fetch",
+        "vikram_ptb",
         "perfect",
-        "custom",
+
+        "virt_baseline",
+        "virt_victima",
+        "virt_utopia",
+        "virt_potm",
+        "virt_vikram_both",
     ]
+
     values = [v.strip() for v in value_string.split(",")]
     for v in values:
         if v not in choices:
@@ -227,9 +368,20 @@ def resolve_experiments(args: argparse.Namespace) -> List[Tuple[str, str]]:
     if args.experiment == "all":
         keys: Iterable[str] = [
             "baseline",
-            "baseline-virtualized",
-            "ptb",
-            "ptb-virtualized",
+            "radix_perfect_pwc",
+            "victima",
+            "utopia",
+            "potm",
+            "vikram_both",
+            "vikram_fetch",
+            "vikram_ptb",
+            "perfect",
+
+            "virt_baseline",
+            "virt_victima",
+            "virt_utopia",
+            "virt_potm",
+            "virt_vikram_both",
         ]
     else:
         keys = parse_string_experiments(args.experiment)
@@ -242,6 +394,18 @@ def resolve_experiments(args: argparse.Namespace) -> List[Tuple[str, str]]:
         resolved.append((label, config_path))
     return resolved
 
+def resolve_multi_core_experiments(args: argparse.Namespace) -> List[Tuple[str, str, str]]:
+    resolved = []
+    keys = parse_string_experiments(args.experiment)
+    for key in keys:
+        if key not in MULTI_CORE_EXPERIMENT_CONFIGS:
+            continue
+        for config_name, config_info in MULTI_CORE_EXPERIMENT_CONFIGS.items():
+            cores = config_name.split("core")[0]
+            label = f"{config_info['label']}"
+            config_path = args.config or config_info["config"]
+            resolved.append((cores, label, config_path))
+        return resolved
 
 def q(value):
     return f'\"{value}\"'
@@ -260,6 +424,50 @@ def build_commands(args: argparse.Namespace) -> List[Tuple[str, str]]:
             os.makedirs(output_dir, exist_ok=True)
 
             trace_command = f"--traces={os.path.join(args.traces_dir, trace)}"
+            output_command = f"-d /app/{output_dir}"
+            config_command = f"-c {config_path}"
+            job_label = f"{experiment_label}_{trace_name}"
+
+            base_command = (
+                f"{docker_prefix} {SNIPER_COMMAND} "
+                f"{output_command} {config_command} {trace_command}"
+            )
+
+            if args.mode == "slurm":
+                slurm_directives = [
+                    "sbatch",
+                    f"-J {job_label}",
+                    f"--output={output_dir}.out",
+                    f"--error={output_dir}.err",
+                ]
+                if args.excluded_nodes:
+                    slurm_directives.insert(1, f"--exclude={args.excluded_nodes}")
+
+                command = (
+                    " ".join(slurm_directives)
+                    + ' docker_wrapper.sh "'
+                    + base_command
+                    + '"'
+                )
+            else:
+                command = f"{base_command} > {output_dir}.out 2> {output_dir}.err"
+
+            commands.append((command, job_label))
+
+    multicore_jobs = resolve_multi_core_experiments(args)
+    if not multicore_jobs:
+        return commands
+    for cores, experiment_label, config_path in multicore_jobs:
+        experiment_root = Path(args.results_dir) / f"{cores}core" / experiment_label
+        experiment_root.mkdir(parents=True, exist_ok=True)
+        trace_group = MULTICORE_WORKLOAD[cores]
+
+        for trace_list in trace_group:
+            trace_name = "_".join([t.split(".")[0] for t in trace_list])
+            output_dir = experiment_root / trace_name
+            os.makedirs(output_dir, exist_ok=True)
+
+            trace_command = f"--traces={','.join([os.path.join(args.traces_dir, t) for t in trace_list])}"
             output_command = f"-d /app/{output_dir}"
             config_command = f"-c {config_path}"
             job_label = f"{experiment_label}_{trace_name}"

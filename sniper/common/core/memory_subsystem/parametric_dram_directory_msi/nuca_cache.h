@@ -33,6 +33,9 @@ class NucaCache
       UInt64 m_metadata_reads, m_metadata_writes, m_metadata_read_misses, m_metadata_write_misses;
       ShmemPerf m_dummy_shmem_perf;
 
+      bool perfect;
+      std::vector<bool> m_perfect_for_radix_level;
+
       SubsecondTime accessDataArray(Cache::access_t access, SubsecondTime t_start, ShmemPerf *perf);
 
    public:
@@ -44,6 +47,8 @@ class NucaCache
       void markTranslationMetadata(IntPtr address, CacheBlockInfo::block_type_t blocktype);
       Cache* getCache(){return m_cache;}
       void measureStats();
+
+      bool isPerfect(){return perfect;}
 };
 
 #endif // __NUCA_CACHE_H
