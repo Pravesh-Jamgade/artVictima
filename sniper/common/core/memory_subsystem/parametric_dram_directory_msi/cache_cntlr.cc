@@ -929,8 +929,8 @@ CacheCntlr::enqueuePrefetch(IntPtr address, SubsecondTime t_issue)
       m_master->m_prefetch_next = t_issue + PREFETCH_INTERVAL;
    
    // record early fetch metadata
-   assert(early_fetch_metadata.enabled);
    if(early_fetch_metadata.enabled == false){
+      early_fetch_metadata.enabled = true;
       early_fetch_metadata.m_last_prefetch_issue = m_master->m_prefetch_next;
       early_fetch_metadata.last_address = address;
    }

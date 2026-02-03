@@ -682,7 +682,12 @@ namespace ParametricDramDirectoryMSI{
                             break;
                     }
                 }
-                assert(!prefetch_cache);
+                
+                if(!prefetch_cache)
+                {
+                    return total_latency+InitializeWalkRecursive(eip,address,level+1,new_table->entries[a1].next_level_table,lock_signal,data_buf,data_length,modeled,count, traversal_path, allow_psc_lookup && !pd_psc_miss, psc_state, ptb_hit);
+                }
+
                 std::vector<uint64_t> vpn_indices = computeVpnIndices(address);
                 uint64_t leaf_index = vpn_indices.back();
                 ptw_table* leaf_table = new_table->entries[a1].next_level_table;
