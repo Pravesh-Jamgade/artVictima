@@ -569,22 +569,15 @@ namespace ParametricDramDirectoryMSI{
                         UInt64 pte_cycles = (t_done > t_issue)
                             ? SubsecondTime::divideRounded(t_done - t_issue, core->getDvfsDomain()->getPeriod())
                             : 0;
-
-                        if (pte_cycles > 0) {
-                            // overlap = portion completed before demand needs it
+                        if(pte_cycles > 0){
                             SubsecondTime t_overlap_end = (t_need < t_done) ? t_need : t_done;
                             UInt64 overlap_cycles = (t_overlap_end > t_issue)
                                 ? SubsecondTime::divideRounded(t_overlap_end - t_issue, core->getDvfsDomain()->getPeriod())
                                 : 0;
-
-                            // tail = remaining part after demand arrives (stall part)
                             UInt64 tail_cycles = (t_done > t_need)
                                 ? SubsecondTime::divideRounded(t_done - t_need, core->getDvfsDomain()->getPeriod())
                                 : 0;
-
-                            // overlap ratio in milli-units
-                            UInt64 ratio_milli = (overlap_cycles * 1000ULL) / pte_cycles;
-
+                            UInt64 ratio_milli = static_cast<UInt64>((overlap_cycles * 1000ULL) / pte_cycles);
                             overlap_ratio_histogram.update(ratio_milli);
                             overlap_tail_latency_histogram.update(tail_cycles);
 
@@ -698,14 +691,19 @@ namespace ParametricDramDirectoryMSI{
                 SubsecondTime prefetch_time = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
                 prefetch_cache->enqueuePrefetch(leaf_address, prefetch_time);
                 prefetch_cache->Prefetch(eip, prefetch_time);
+                SubsecondTime prefetch_issue = prefetch_cache->getLastPrefetchIssue();
+                SubsecondTime prefetch_done = prefetch_cache->getLastPrefetchDone();
+                HitWhere::where_t res = HitWhere::UNKNOWN;
                 pwc->lookup(leaf_address, prefetch_time, true, level + 1, false);
 
-                SubsecondTime prefetch_done = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
-                uint64_t delta = SubsecondTime::divideRounded(prefetch_done - prefetch_time, core->getDvfsDomain()->getPeriod());
+                uint64_t delta = (prefetch_done > prefetch_issue)
+                    ? SubsecondTime::divideRounded(prefetch_done - prefetch_issue, core->getDvfsDomain()->getPeriod())
+                    : 0;
+                prefeth_latency[res].update(delta);
                 if(count){
                     overlap_prefetch_state.valid = true;
                     overlap_prefetch_state.leaf_cache_line = leaf_address;
-                    overlap_prefetch_state.t_issue = prefetch_time;
+                    overlap_prefetch_state.t_issue = prefetch_issue;
                     overlap_prefetch_state.t_done = prefetch_done;
                 }
 
