@@ -174,6 +174,7 @@ namespace ParametricDramDirectoryMSI{
                 fprintf(fp, ",%" PRIu64, entry.second);
             fprintf(fp, "\n");
         }
+
     }
 
     PageTableWalkerRadix::PageTableWalkerRadix(int number_of_levels, 
@@ -214,6 +215,8 @@ namespace ParametricDramDirectoryMSI{
         rob_stall_psc_level_cycles.resize(number_of_levels, 0);
         psc_accesses = 0;
         psc_misses = 0;
+        for (auto &row : ptb_pdpt_combo_counts)
+            row.fill(0);
         rob_stall_stlb_miss_cycles = 0;
         traversal_paths_unique_count = 0;
         last_psc_miss_level_index = -1;
@@ -333,15 +336,30 @@ namespace ParametricDramDirectoryMSI{
             };
             last_psc_miss_level_index = -1;
             
+            bool ptb_hit = false;
             if(ptb){
                 PageTableBuffer::LookupResult lookup_result = ptb->lookup(vpn_indices, count);
                 ptb_latency = lookup_result.latency;
+                ptb_hit = lookup_result.hit;
                 if(lookup_result.hit){
                     int start_level = (ptb->getMode() == PageTableBuffer::Mode::LEAF_PT) ? stats_radix.number_of_levels : stats_radix.number_of_levels - 1;
                     ptw_table* start_table = reinterpret_cast<ptw_table*>(lookup_result.base_address);
                     if(count)
                         traversal_path += "->PTB-HIT-L" + std::to_string(start_level);
-                    SubsecondTime walk_latency = InitializeWalkRecursive(eip, address, start_level, start_table, lock_signal, data_buf, data_length, modeled, count, traversal_path, true, &psc_state);
+                    if(count && page_walk_cache_enabled && pwc){
+                        IntPtr pml4_address = (IntPtr)(&starting_table->entries[vpn_indices[0]]);
+                        bool pml4_hit = (pwc->probe(pml4_address, 1) == PWC::HIT);
+                        updatePscCombinationState(&psc_state, 0, pml4_hit, HitWhere::UNKNOWN, !pml4_hit);
+                        bool pdpt_hit = false;
+                        ptw_table* pdpt_table = resolveTableForLevel(vpn_indices, 2);
+                        if(pdpt_table){
+                            IntPtr pdpt_address = (IntPtr)(&pdpt_table->entries[vpn_indices[1]]);
+                            pdpt_hit = (pwc->probe(pdpt_address, 2) == PWC::HIT);
+                        }
+                        updatePscCombinationState(&psc_state, 1, pdpt_hit, HitWhere::UNKNOWN, !pdpt_hit);
+                        recordPtbPdptCombo(true, pdpt_hit);
+                    }
+                    SubsecondTime walk_latency = InitializeWalkRecursive(eip, address, start_level, start_table, lock_signal, data_buf, data_length, modeled, count, traversal_path, true, &psc_state, ptb_hit);
                     SubsecondTime final_latency = ptb_latency + walk_latency;
                     total_ptb_latency += ptb_latency;
                     total_walk_latency += final_latency;
@@ -455,7 +473,7 @@ namespace ParametricDramDirectoryMSI{
             }
 
 
-            SubsecondTime final_latency = ptb_latency + total_latency+InitializeWalkRecursive(eip, address,2,starting_table->entries[a1].next_level_table,lock_signal,data_buf,data_length, modeled, count, traversal_path, true, &psc_state);
+            SubsecondTime final_latency = ptb_latency + total_latency+InitializeWalkRecursive(eip, address,2,starting_table->entries[a1].next_level_table,lock_signal,data_buf,data_length, modeled, count, traversal_path, true, &psc_state, ptb_hit);
 
             if(ptb){
                 PageTableBuffer::Mode mode = ptb->getMode();
@@ -484,7 +502,7 @@ namespace ParametricDramDirectoryMSI{
         int level,ptw_table* new_table,
         Core::lock_signal_t lock_signal,
         Byte* data_buf, UInt32 data_length,
-        bool modeled, bool count, std::string &traversal_path, bool allow_psc_lookup, PscCombinationState *psc_state){
+        bool modeled, bool count, std::string &traversal_path, bool allow_psc_lookup, PscCombinationState *psc_state, bool ptb_hit){
 
             uint64_t a1;
             int shift_bits=0;
@@ -528,6 +546,8 @@ namespace ParametricDramDirectoryMSI{
                     if(page_walk_cache_enabled)
                         updatePscCombinationState(psc_state, level_index, true, HitWhere::where_t(), false);
                     recordLevelStats(level-1, total_latency);
+                    if(count && page_walk_cache_enabled && allow_psc_lookup && level_index == 1)
+                        recordPtbPdptCombo(ptb_hit, true);
             }
             else{
                     
@@ -544,10 +564,13 @@ namespace ParametricDramDirectoryMSI{
                             ? SubsecondTime::divideRounded(t_done - t_issue, core->getDvfsDomain()->getPeriod())
                             : 0;
                         if(pte_cycles > 0){
+                            SubsecondTime t_overlap_end = (t_need < t_done) ? t_need : t_done;
+                            UInt64 overlap_cycles = (t_overlap_end > t_issue)
+                                ? SubsecondTime::divideRounded(t_overlap_end - t_issue, core->getDvfsDomain()->getPeriod())
+                                : 0;
                             UInt64 tail_cycles = (t_done > t_need)
                                 ? SubsecondTime::divideRounded(t_done - t_need, core->getDvfsDomain()->getPeriod())
                                 : 0;
-                            UInt64 overlap_cycles = (pte_cycles > tail_cycles) ? (pte_cycles - tail_cycles) : 0;
                             UInt64 ratio_milli = static_cast<UInt64>((overlap_cycles * 1000ULL) / pte_cycles);
                             overlap_ratio_histogram.update(ratio_milli);
                             overlap_tail_latency_histogram.update(tail_cycles);
@@ -592,6 +615,8 @@ namespace ParametricDramDirectoryMSI{
                         else
                             traversal_path += "->PSC-L" + std::to_string(level_index + 1) + "-DISABLED";
                     }
+                    if(count && page_walk_cache_enabled && allow_psc_lookup && level_index == 1)
+                        recordPtbPdptCombo(ptb_hit, false);
 
             }
 
@@ -626,12 +651,16 @@ namespace ParametricDramDirectoryMSI{
                         case HitWhere::L4_OWN:
                             prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::L4_CACHE);
                             break;
+                        case HitWhere::NUCA_CACHE:
+                            prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::LAST_LEVEL_CACHE);
+                            break;
                         case HitWhere::DRAM:
                         case HitWhere::DRAM_LOCAL:
                         case HitWhere::DRAM_REMOTE:
                         case HitWhere::DRAM_CACHE:
+                            prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::LAST_LEVEL_CACHE);
+                            break;
                         case HitWhere::MISS:
-                        case HitWhere::NUCA_CACHE:
                         case HitWhere::CACHE_REMOTE:
                         case HitWhere::SIBLING:
                         case HitWhere::L1_SIBLING:
@@ -639,7 +668,7 @@ namespace ParametricDramDirectoryMSI{
                         case HitWhere::L3_SIBLING:
                         case HitWhere::L4_SIBLING:
                         default:
-                            prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::LAST_LEVEL_CACHE);
+                            prefetch_cache = cache;
                             break;
                     }
                 }
@@ -650,30 +679,28 @@ namespace ParametricDramDirectoryMSI{
                 ptw_table* leaf_table = new_table->entries[a1].next_level_table;
                 IntPtr leaf_address = ((IntPtr)(&leaf_table->entries[leaf_index])) & (~((64 - 1)));
                 SubsecondTime prefetch_time = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
-                HitWhere::where_t res = prefetch_cache->processMemOpFromCore(
-                    eip,
-                    lock_signal,
-                    Core::mem_op_t::READ,
-                    leaf_address, 0,
-                    data_buf, data_length,
-                    true,
-                    false, CacheBlockInfo::block_type_t::PAGE_TABLE, SubsecondTime::Zero());
+                prefetch_cache->enqueuePrefetch(leaf_address, prefetch_time);
+                prefetch_cache->Prefetch(eip, prefetch_time);
+                SubsecondTime prefetch_issue = prefetch_cache->getLastPrefetchIssue();
+                SubsecondTime prefetch_done = prefetch_cache->getLastPrefetchDone();
+                HitWhere::where_t res = HitWhere::UNKNOWN;
                 pwc->lookup(leaf_address, prefetch_time, true, level + 1, false);
 
-                SubsecondTime prefetch_done = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
-                uint64_t delta = SubsecondTime::divideRounded(prefetch_done - prefetch_time, core->getDvfsDomain()->getPeriod());
+                uint64_t delta = (prefetch_done > prefetch_issue)
+                    ? SubsecondTime::divideRounded(prefetch_done - prefetch_issue, core->getDvfsDomain()->getPeriod())
+                    : 0;
                 prefeth_latency[res].update(delta);
                 if(count){
                     overlap_prefetch_state.valid = true;
                     overlap_prefetch_state.leaf_cache_line = leaf_address;
-                    overlap_prefetch_state.t_issue = prefetch_time;
+                    overlap_prefetch_state.t_issue = prefetch_issue;
                     overlap_prefetch_state.t_done = prefetch_done;
                 }
 
                 m_shmem_perf_model->setElapsedTime(ShmemPerfModel::_USER_THREAD, prefetch_time);
             }
 
-            return total_latency+InitializeWalkRecursive(eip,address,level+1,new_table->entries[a1].next_level_table,lock_signal,data_buf,data_length,modeled,count, traversal_path, allow_psc_lookup && !pd_psc_miss, psc_state);
+            return total_latency+InitializeWalkRecursive(eip,address,level+1,new_table->entries[a1].next_level_table,lock_signal,data_buf,data_length,modeled,count, traversal_path, allow_psc_lookup && !pd_psc_miss, psc_state, ptb_hit);
         
     }
     void PageTableWalkerRadix::recordPscMiss(int level_index, SubsecondTime latency, HitWhere::where_t hit_where){
@@ -693,6 +720,27 @@ namespace ParametricDramDirectoryMSI{
         }
         last_psc_miss_level_index = level_index;
         last_psc_miss_hitwhere = hit_where;
+    }
+
+    void PageTableWalkerRadix::recordPtbPdptCombo(bool ptb_hit, bool pdpt_hit){
+        size_t ptb_index = ptb_hit ? 1 : 0;
+        size_t pdpt_index = pdpt_hit ? 1 : 0;
+        ptb_pdpt_combo_counts[ptb_index][pdpt_index]++;
+    }
+
+    void PageTableWalkerRadix::snapshotPscStats(std::vector<UInt64> &hits,
+                                                std::vector<UInt64> &misses,
+                                                std::vector<std::array<UInt64, HitWhere::NUM_HITWHERES>> &hitwhere) const{
+        hits = psc_hits_per_level;
+        misses = psc_misses_per_level;
+        hitwhere.assign(psc_miss_hit_where_counts.size(), {});
+        for (size_t level = 0; level < psc_miss_hit_where_counts.size(); ++level){
+            hitwhere[level].fill(0);
+            const auto &map = hit_where_histograms[level];
+            for (const auto &entry : map){
+                hitwhere[level][entry.first] = entry.second;
+            }
+        }
     }
 
     void PageTableWalkerRadix::updatePscCombinationState(PscCombinationState *psc_state, int level_index, bool hit, HitWhere::where_t hit_where, bool has_hitwhere){
@@ -922,6 +970,18 @@ namespace ParametricDramDirectoryMSI{
                 for (const auto &entry : psc_miss_hitwhere_pair_counts)
                     fprintf(stats_fp, "    %s: %" PRIu64 "\n", entry.first.c_str(), entry.second);
             }
+            UInt64 ptb_pdpt_total = 0;
+            for (const auto &row : ptb_pdpt_combo_counts){
+                for (UInt64 count : row)
+                    ptb_pdpt_total += count;
+            }
+            if(ptb_pdpt_total > 0){
+                fprintf(stats_fp, "  proposed PTB/PDPT hit combinations:\n");
+                fprintf(stats_fp, "    PTB-MISS PDPT-MISS: %" PRIu64 "\n", ptb_pdpt_combo_counts[0][0]);
+                fprintf(stats_fp, "    PTB-MISS PDPT-HIT: %" PRIu64 "\n", ptb_pdpt_combo_counts[0][1]);
+                fprintf(stats_fp, "    PTB-HIT PDPT-MISS: %" PRIu64 "\n", ptb_pdpt_combo_counts[1][0]);
+                fprintf(stats_fp, "    PTB-HIT PDPT-HIT: %" PRIu64 "\n", ptb_pdpt_combo_counts[1][1]);
+            }
             if(!traversal_path_counts.empty()){
                 fprintf(stats_fp, "[Core %d] proposed PTW traversal paths (%" PRIu64 "):\n", core_id, traversal_paths_unique_count);
                 for(const auto &entry : traversal_path_counts){
@@ -1008,6 +1068,20 @@ namespace ParametricDramDirectoryMSI{
                 for (const auto &entry : psc_miss_hitwhere_pair_counts)
                     pair_entries.emplace_back(entry.first, entry.second);
                 printCsvLabeledCounts(csv_fp, "proposed_PSC_miss_hitwhere_pairs", pair_entries);
+            }
+            UInt64 ptb_pdpt_total = 0;
+            for (const auto &row : ptb_pdpt_combo_counts){
+                for (UInt64 count : row)
+                    ptb_pdpt_total += count;
+            }
+            if(ptb_pdpt_total > 0){
+                std::vector<std::pair<std::string, UInt64>> combo_entries;
+                combo_entries.reserve(4);
+                combo_entries.emplace_back("PTB-MISS_PDPT-MISS", ptb_pdpt_combo_counts[0][0]);
+                combo_entries.emplace_back("PTB-MISS_PDPT-HIT", ptb_pdpt_combo_counts[0][1]);
+                combo_entries.emplace_back("PTB-HIT_PDPT-MISS", ptb_pdpt_combo_counts[1][0]);
+                combo_entries.emplace_back("PTB-HIT_PDPT-HIT", ptb_pdpt_combo_counts[1][1]);
+                printCsvLabeledCounts(csv_fp, "proposed_PTB_PDPT_combo", combo_entries);
             }
             if(!traversal_path_counts.empty()){
                 std::vector<std::pair<std::string, UInt64>> path_entries;
