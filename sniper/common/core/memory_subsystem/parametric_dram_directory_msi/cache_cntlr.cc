@@ -171,7 +171,8 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
    m_shmem_perf(new ShmemPerf()),
    m_shmem_perf_global(NULL),
    m_shmem_perf_model(shmem_perf_model),
-   metadata_passthrough_loc(Sim()->getCfg()->getInt("perf_model/metadata/passthrough_loc"))
+   metadata_passthrough_loc(Sim()->getCfg()->getInt("perf_model/metadata/passthrough_loc")),
+   tempo_prefetch_enabled(Sim()->getCfg()->getBoolDefault("perf_model/ptw_radix/tempo_prefetch", false))
 {
    m_core_id_master = m_core_id - m_core_id % m_shared_cores;
    Sim()->getStatsManager()->logTopology(name, core_id, m_core_id_master);
@@ -234,6 +235,12 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
       m_perfect_for_radix_level[i] = Sim()->getCfg()->getBoolArray("perf_model/"+cache_params.configName+"/perfect_for_radix_level", i);
    }
 
+   tempo_prefetch_times.clear();
+   tempo_overlap_samples = 0;
+   tempo_overlap_ready = 0;
+   tempo_overlap_ratio_sum_milli = 0;
+   tempo_overlap_tail_cycles_sum = 0;
+
    bzero(&stats, sizeof(stats));
    registerStatsMetric(name, core_id, String("tloads"), &stats.tloads);
    registerStatsMetric(name, core_id, String("tstores"), &stats.tstores);
@@ -257,6 +264,10 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
    registerStatsMetric(name, core_id, "evict-prefetch", &stats.evict_prefetch);
    registerStatsMetric(name, core_id, "invalidate-prefetch", &stats.invalidate_prefetch);
    registerStatsMetric(name, core_id, "hits-warmup", &stats.hits_warmup);
+   registerStatsMetric(name, core_id, "tempo_overlap_samples", &tempo_overlap_samples);
+   registerStatsMetric(name, core_id, "tempo_overlap_ready", &tempo_overlap_ready);
+   registerStatsMetric(name, core_id, "tempo_overlap_ratio_sum_milli", &tempo_overlap_ratio_sum_milli);
+   registerStatsMetric(name, core_id, "tempo_overlap_tail_cycles_sum", &tempo_overlap_tail_cycles_sum);
    registerStatsMetric(name, core_id, "evict-warmup", &stats.evict_warmup);
    registerStatsMetric(name, core_id, "invalidate-warmup", &stats.invalidate_warmup);
    registerStatsMetric(name, core_id, "total-latency", &stats.total_latency);
@@ -370,7 +381,8 @@ CacheCntlr::processMemOpFromCore(
       Byte* data_buf, UInt32 data_length,
       bool modeled,
       bool count,CacheBlockInfo::block_type_t block_type,SubsecondTime TLB_latency, UtopiaCache *shadow_cache,
-      Core::mem_origin_t mem_origin)
+      Core::mem_origin_t mem_origin,
+      IntPtr original_address)
 {
 
    HitWhere::where_t hit_where = HitWhere::MISS;
@@ -427,6 +439,39 @@ CacheCntlr::processMemOpFromCore(
 
 
    SubsecondTime t_start = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
+
+   if (tempo_prefetch_enabled
+       && !metadata_request
+       && count)
+   {
+      auto tempo_it = tempo_prefetch_times.find(ca_address);
+      if (tempo_it != tempo_prefetch_times.end())
+      {
+         SubsecondTime t_need = t_start;
+         SubsecondTime t_issue = tempo_it->second.t_issue;
+         SubsecondTime t_done = tempo_it->second.t_done;
+         UInt64 prefetch_cycles = (t_done > t_issue)
+            ? SubsecondTime::divideRounded(t_done - t_issue, m_memory_manager->getCore()->getDvfsDomain()->getPeriod())
+            : 0;
+         if (prefetch_cycles > 0)
+         {
+            SubsecondTime t_overlap_end = (t_need < t_done) ? t_need : t_done;
+            UInt64 overlap_cycles = (t_overlap_end > t_issue)
+               ? SubsecondTime::divideRounded(t_overlap_end - t_issue, m_memory_manager->getCore()->getDvfsDomain()->getPeriod())
+               : 0;
+            UInt64 tail_cycles = (t_done > t_need)
+               ? SubsecondTime::divideRounded(t_done - t_need, m_memory_manager->getCore()->getDvfsDomain()->getPeriod())
+               : 0;
+            UInt64 ratio_milli = static_cast<UInt64>((overlap_cycles * 1000ULL) / prefetch_cycles);
+            tempo_overlap_ratio_sum_milli += ratio_milli;
+            tempo_overlap_tail_cycles_sum += tail_cycles;
+            tempo_overlap_samples++;
+            if (t_done <= t_need)
+               tempo_overlap_ready++;
+         }
+         tempo_prefetch_times.erase(tempo_it);
+      }
+   }
   
    UtopiaCache::where_t shadow_cache_lookup;
    bool shadow_cache_hit = false;
@@ -828,6 +873,38 @@ CacheCntlr::processMemOpFromCore(
    
 
    MYLOG("returning %s, latency %lu ns, and with translation latency %lu", HitWhereString(hit_where), total_latency.getNS(),TLB_latency.getNS());
+
+   if (tempo_prefetch_enabled
+       && metadata_request
+       && mem_origin == Core::mem_origin_t::PT_ACCESS
+       && original_address != INVALID_ADDRESS)
+   {
+      bool dram_hit = (hit_where == HitWhere::DRAM)
+         || (hit_where == HitWhere::DRAM_LOCAL)
+         || (hit_where == HitWhere::DRAM_REMOTE)
+         || (hit_where == HitWhere::DRAM_CACHE);
+      if (dram_hit)
+      {
+         CacheCntlr* prefetch_cache = m_memory_manager->getCacheCntlrAt(m_core_id, MemComponent::LAST_LEVEL_CACHE);
+         if (!prefetch_cache)
+            prefetch_cache = this;
+         IntPtr prefetch_address = original_address & (~((IntPtr) (m_cache_block_size - 1)));
+         SubsecondTime prefetch_time = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
+         bool pushed = prefetch_cache->enqueuePrefetch(prefetch_address, prefetch_time);
+         if (pushed)
+         {
+            prefetch_cache->Prefetch(eip, prefetch_time);
+            SubsecondTime prefetch_issue = prefetch_cache->getLastPrefetchIssue();
+            SubsecondTime prefetch_done = prefetch_cache->getLastPrefetchDone();
+            if (prefetch_done > prefetch_issue)
+            {
+               tempo_prefetch_times[prefetch_address] = {prefetch_issue, prefetch_done};
+               if (tempo_prefetch_times.size() > 1024)
+                  tempo_prefetch_times.erase(tempo_prefetch_times.begin());
+            }
+         }
+      }
+   }
    
    return hit_where;
 }
@@ -844,6 +921,18 @@ CacheCntlr::updateHits(Core::mem_op_t mem_op_type, UInt64 hits)
       updateCounters(mem_op_type, 0, true, mem_op_type == Core::READ ? CacheState::SHARED : CacheState::MODIFIED, CacheBlockInfo::block_type_t::NON_PAGE_TABLE,Prefetch::NONE);
       hits--;
    }
+}
+
+void
+CacheCntlr::getTempoOverlapStats(UInt64 &samples,
+                                 UInt64 &ready,
+                                 UInt64 &ratio_sum_milli,
+                                 UInt64 &tail_cycles_sum) const
+{
+   samples = tempo_overlap_samples;
+   ready = tempo_overlap_ready;
+   ratio_sum_milli = tempo_overlap_ratio_sum_milli;
+   tail_cycles_sum = tempo_overlap_tail_cycles_sum;
 }
 
 

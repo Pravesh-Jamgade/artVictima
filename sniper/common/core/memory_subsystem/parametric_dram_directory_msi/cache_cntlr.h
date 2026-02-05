@@ -234,6 +234,16 @@ namespace ParametricDramDirectoryMSI
 
          int metadata_passthrough_loc;
          std::vector<bool> m_perfect_for_radix_level;
+         bool tempo_prefetch_enabled;
+         struct TempoPrefetchTimes {
+            SubsecondTime t_issue;
+            SubsecondTime t_done;
+         };
+         std::unordered_map<IntPtr, TempoPrefetchTimes> tempo_prefetch_times;
+         UInt64 tempo_overlap_samples;
+         UInt64 tempo_overlap_ready;
+         UInt64 tempo_overlap_ratio_sum_milli;
+         UInt64 tempo_overlap_tail_cycles_sum;
 
 
          struct {
@@ -418,11 +428,16 @@ namespace ParametricDramDirectoryMSI
                Byte* data_buf, UInt32 data_length,
                bool modeled,
                bool count,CacheBlockInfo::block_type_t block_type,SubsecondTime TLB_latency,UtopiaCache *shadow_cache = NULL,
-               Core::mem_origin_t mem_origin = Core::mem_origin_t::NORMAL);
+               Core::mem_origin_t mem_origin = Core::mem_origin_t::NORMAL,
+               IntPtr original_address = INVALID_ADDRESS);
          bool enqueuePrefetch(IntPtr address, SubsecondTime t_issue);
          SubsecondTime getLastPrefetchIssue() const { return m_last_prefetch_issue; }
          SubsecondTime getLastPrefetchDone() const { return m_last_prefetch_done; }
          void updateHits(Core::mem_op_t mem_op_type, UInt64 hits);
+         void getTempoOverlapStats(UInt64 &samples,
+                                   UInt64 &ready,
+                                   UInt64 &ratio_sum_milli,
+                                   UInt64 &tail_cycles_sum) const;
 
          // Notify next level cache of so it can update its sharing set
          void notifyPrevLevelInsert(core_id_t core_id, MemComponent::component_t mem_component, IntPtr address);
