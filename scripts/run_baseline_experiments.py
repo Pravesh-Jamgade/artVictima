@@ -397,10 +397,12 @@ def resolve_experiments(args: argparse.Namespace) -> List[Tuple[str, str]]:
 def resolve_multi_core_experiments(args: argparse.Namespace) -> List[Tuple[str, str, str]]:
     resolved = []
     keys = parse_string_experiments(args.experiment)
+    print(keys)
     for key in keys:
-        if key not in MULTI_CORE_EXPERIMENT_CONFIGS:
-            continue
+       
         for config_name, config_info in MULTI_CORE_EXPERIMENT_CONFIGS.items():
+            if key not in config_name:
+                continue
             cores = config_name.split("core")[0]
             label = f"{config_info['label']}"
             config_path = args.config or config_info["config"]
