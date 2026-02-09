@@ -11,8 +11,8 @@ from typing import List, Dict, Optional, Tuple, Iterator
 # Catches optional whitespace around the equals sign and captures the numeric value
 # IPC_RE = re.compile(r"ipc\s*=\s*([\d\.]+),\s*([\d\.]+),\s*([\d\.]+),\s*([\d\.]+),\s*([\d\.]+),\s*([\d\.]+),\s*([\d\.]+),\s*([\d\.]+)")
 # IPC_RE = re.compile(r"ipc\s*=\s*([\d\.]+),\s*([\d\.]+),\s*([\d\.]+),\s*([\d\.]+)")
-IPC_RE = re.compile(r"ipc\s*=\s*([\d\.]+),\s*([\d\.]+)")
-# IPC_RE = re.compile(r"ipc\s*=\s*([\d\.]+),\")
+# IPC_RE = re.compile(r"ipc\s*=\s*([\d\.]+),\s*([\d\.]+)")
+IPC_RE = re.compile(r"ipc\s*=\s*([\d\.]+)")
 
 def path_tag(file_path: Path) -> str: 
     """Generates a consistent tag from the parent directory path components."""
@@ -43,7 +43,7 @@ def main(root_dir="", out_csv="stats_ipc_only_recursive.csv"):
     print(f"Searching in {root}. Files found: {len(all_files_to_scan)} relevant files.")
 
     rows: List[Dict] = []
-    output_fieldnames = ["folder_tag", "metric_name", "ipc1", "ipc2", "ipc3",  "ipc4"]#, "ipc5", "ipc6", "ipc7", "ipc8"]
+    output_fieldnames = ["folder_tag", "metric_name", "ipc1"]#, "ipc2", "ipc3",  "ipc4", "ipc5", "ipc6", "ipc7", "ipc8"]
     
     # --- Processing Loop (Recursive Read Structure) ---
     for f in all_files_to_scan:
@@ -56,7 +56,7 @@ def main(root_dir="", out_csv="stats_ipc_only_recursive.csv"):
                 if ipc_match := IPC_RE.match(line):
                     metric_name = "ipc"
                     metric_value1 = ipc_match.group(1) # The value captured by the regex group
-                    metric_value2 = ipc_match.group(2) # The value captured by the regex group
+                    # metric_value2 = ipc_match.group(2) # The value captured by the regex group
                     # metric_value3 = ipc_match.group(3) # The value captured by the regex group
                     # metric_value4 = ipc_match.group(4) # The value captured by the regex group
                     # metric_value5 = ipc_match.group(5) # The value captured by the regex group
@@ -67,7 +67,7 @@ def main(root_dir="", out_csv="stats_ipc_only_recursive.csv"):
                         "folder_tag": tag,
                         "metric_name": metric_name,
                         "ipc1": metric_value1,
-                        "ipc2": metric_value2,
+                        # "ipc2": metric_value2,
                         # "ipc3": metric_value3,
                         # "ipc4": metric_value4,
                         # "ipc5": metric_value5,

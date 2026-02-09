@@ -894,8 +894,9 @@ CacheCntlr::processMemOpFromCore(
          if (pushed)
          {
             prefetch_cache->Prefetch(eip, prefetch_time);
-            SubsecondTime prefetch_issue = prefetch_cache->getLastPrefetchIssue();
-            SubsecondTime prefetch_done = prefetch_cache->getLastPrefetchDone();
+            EarlyFetchMetadata early_fetch_metadata = prefetch_cache->get_prefetch_metadata(prefetch_address);
+            SubsecondTime prefetch_issue = early_fetch_metadata.m_last_prefetch_issue;
+            SubsecondTime prefetch_done = early_fetch_metadata.m_last_prefetch_done;
             if (prefetch_done > prefetch_issue)
             {
                tempo_prefetch_times[prefetch_address] = {prefetch_issue, prefetch_done};

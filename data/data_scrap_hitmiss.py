@@ -7,8 +7,8 @@ from typing import List, Dict, Optional, Set
 import pandas as pd
 
 # Regex for L1-L4 hits and misses
-HITS_RE = re.compile(r"^proposed_PSC_L(\d+)_hits,(\d+)$")
-MISS_RE = re.compile(r"^proposed_PSC_L(\d+)_misses,(\d+)$")
+HITS_RE = re.compile(r"proposed_PSC_L(\d+)_hits,(\d+)$")
+MISS_RE = re.compile(r"proposed_PSC_L(\d+)_misses,(\d+)$")
 
 def path_tag(file_path: Path, root: Path) -> str: 
     """Returns folder path relative to the search root, joined by underscores."""
@@ -41,8 +41,8 @@ def main(root_dir="", raw_out_csv="stats_hitmiss.csv", summary_out_csv="stats_hi
                 line = line.strip()
                 if not line: continue
                 
-                hit_match = HITS_RE.match(line)
-                miss_match = MISS_RE.match(line)
+                hit_match = HITS_RE.search(line)
+                miss_match = MISS_RE.search(line)
                 
                 if hit_match:
                     lvl, val = hit_match.groups()

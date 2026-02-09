@@ -7,8 +7,8 @@ from typing import List, Dict, Optional, Set
 import pandas as pd # Import pandas for aggregation
 
 # Regex patterns (same as before)
-HITWHERE_LINE_RE = re.compile(r"^proposed_PSC_L\d+_miss_hitwhere.*$")
-METRIC_LEVEL_RE = re.compile(r"^proposed_PSC_L(\d+)_miss_hitwhere$")
+HITWHERE_LINE_RE = re.compile(r"proposed_PSC_L4_miss_hitwhere")
+METRIC_LEVEL_RE = re.compile(r"proposed_PSC_L(\d+)_miss_hitwhere")
 
 def path_tag(file_path: Path) -> str: 
     return "_".join(file_path.parent.parts)
@@ -22,7 +22,7 @@ def main(root_dir="", raw_out_csv="stats_hitwhere_dynamic.csv", summary_out_csv=
         root_dir = "."
     
     root = Path(root_dir).resolve()
-    stats_files: List[Path] = list(root.rglob("proposed.csv"))
+    stats_files: List[Path] = list(root.rglob("proposed*.csv"))
     print(f"Searching in {root}. Files found: {len(stats_files)}")
 
     rows: List[Dict] = []
@@ -37,7 +37,7 @@ def main(root_dir="", raw_out_csv="stats_hitwhere_dynamic.csv", summary_out_csv=
             
             for line in fp:
                 line = line.strip()
-                if HITWHERE_LINE_RE.match(line):
+                if HITWHERE_LINE_RE.search(line):
                     line_parts = parse_csv_line(line)
                     
                     # Heuristic check for header line definition
@@ -45,7 +45,7 @@ def main(root_dir="", raw_out_csv="stats_hitwhere_dynamic.csv", summary_out_csv=
 
                     if is_header_def:
                         current_headers = line_parts
-                        m = METRIC_LEVEL_RE.match(current_headers[0]) # Fix applied here
+                        m = METRIC_LEVEL_RE.search(current_headers[0]) # Fix applied here
                         if m:
                             current_level = m.group(1)
                             all_unique_headers.update(current_headers[1:])

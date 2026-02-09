@@ -77,6 +77,10 @@ EXPERIMENT_CONFIGS = {
         "label": "potm",
     },
 
+    "tempo": {
+        "config": "/app/sniper/config/virtual_memory_configs/tempo.cfg",
+        "label": "tempo",
+    },
     ##################################################
 
     "virt_baseline": {
@@ -102,6 +106,11 @@ EXPERIMENT_CONFIGS = {
     "virt_potm": {
         "config": "/app/sniper/config/virtual_memory_configs/virt_potm.cfg",
         "label": "virt_potm",
+    },
+
+    "virt_tempo": {
+        "config": "/app/sniper/config/virtual_memory_configs/virt_tempo.cfg",
+        "label": "virt_tempo",
     },
 }
 
@@ -140,6 +149,10 @@ MULTI_CORE_EXPERIMENT_CONFIGS = {
         "label": "2core_potm",
     },
 
+    "2core_tempo": {
+        "config": "/app/sniper/config/virtual_memory_configs/2core_tempo.cfg",
+        "label": "2core_tempo",
+    },
 
      ###################################################################
     # 4 core Experiments
@@ -175,6 +188,11 @@ MULTI_CORE_EXPERIMENT_CONFIGS = {
         "label": "4core_potm",
     },
 
+    "4core_tempo": {
+        "config": "/app/sniper/config/virtual_memory_configs/4core_tempo.cfg",
+        "label": "4core_tempo",
+    },
+
      ###################################################################
     # 8 core Experiments
     ###################################################################
@@ -207,6 +225,11 @@ MULTI_CORE_EXPERIMENT_CONFIGS = {
     "8core_potm": {
         "config": "/app/sniper/config/virtual_memory_configs/8core_potm.cfg",
         "label": "8core_potm",
+    },
+
+    "8core_tempo": {
+        "config": "/app/sniper/config/virtual_memory_configs/8core_tempo.cfg",
+        "label": "8core_tempo",
     },
 }
 
@@ -337,6 +360,10 @@ def csv_choices(value_string):
         "virt_utopia",
         "virt_potm",
         "virt_vikram_both",
+
+        "tempo",
+        "virt_tempo",
+        
     ]
 
     values = [v.strip() for v in value_string.split(",")]
