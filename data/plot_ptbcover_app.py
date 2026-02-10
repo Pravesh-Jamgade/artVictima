@@ -4,33 +4,33 @@ import io
 
 # Data setup
 data = """
-Workload	PTB-MISS_PDPT-MISS	PTB-MISS_PDPT-HIT	PTB-HIT_PDPT-MISS	PTB-HIT_PDPT-HIT
-dlrm	19	0	34360926	1441489
-pr	18	0	16994186	2301520
-cc	18	0	41042755	2122952
-sssp	763653	222	18401537	13909628
-gc	4570782	10124	24419022	2622798
-tc	9	0	1183285	2208679
-xs	11	0	2172201	5204235
-rnd	2	0	0	35551229
-bfs	19	0	34002093	1441858
-bc	94400	32	2334501	3173655
-gen	4570762	10136	24426880	2623492
+Workload,PTB-MISS_PDPT-MISS,PTB-MISS_PDPT-HIT,PTB-HIT_PDPT-MISS,PTB-HIT_PDPT-HIT
+dlrm,19,0,34350273,1441558
+pr,18,0,16994916,2301638
+cc,18,0,36077187,7065207
+sssp,763639,223,18255056,13896388
+gc,4570576,10149,24430753,2623111
+tc,9,0,1183286,2208679
+xs,11,0,2172203,5204241
+rnd,2,0,0,35550382
+bfs,19,0,34503701,1441598
+bc,94400,32,2334501,3173652
+gen,4570673,10137,24431000,2622267
 """
 
-df = pd.read_csv(io.StringIO(data), sep=r'\s+')
+df = pd.read_csv(io.StringIO(data), sep=',')
 
 # 1. Map column names and set index
 level_map = {
-    'PTB-MISS_PDPT-MISS': 'PTB Miss PDPT Miss', 
-    'PTB-MISS_PDPT-HIT': 'PTB Miss PDPT Hit', 
-    'PTB-HIT_PDPT-MISS': 'PTB Hit PDPT Miss', 
-    'PTB-HIT_PDPT-HIT': 'PTB Hit PDPT Hit'
+    'PTB-MISS_PDPT-MISS': 'PTB-Miss, PDPT-Miss', 
+    'PTB-MISS_PDPT-HIT': 'PTB-Miss, PDPT-Hit', 
+    'PTB-HIT_PDPT-MISS': 'PTB-Hit, PDPT-Miss', 
+    'PTB-HIT_PDPT-HIT': 'PTB-Hit, PDPT-Hit'
 }
 df = df.rename(columns=level_map)
 df.set_index('Workload', inplace=True)
 
-# 2. Calculate Average and append as a new row
+# 2. Calculate Mean and append
 avg_row = df.mean().to_frame().T
 avg_row.index = ['mean']
 df = pd.concat([df, avg_row])
@@ -38,28 +38,45 @@ df = pd.concat([df, avg_row])
 # 3. Normalize to 100%
 df_percent = df.div(df.sum(axis=1), axis=0) * 100
 
-# 4. Plotting
-ax = df_percent.plot(kind='bar', stacked=True, figsize=(14, 8), width=0.7)
+# 4. Plotting - ISCA/MICRO Style (Compact and High-Viz)
+fig, ax = plt.subplots(figsize=(14, 5))
 
-# Position Legend ABOVE the chart
+# Professional Palette and Hatches
+colors = ['#4C72B0', '#55A868', '#C44E52', '#8172B3', '#DD8452']
+hatches = ['', '//', '..', 'xx', '\\\\', '--']
+
+
+# Plot bars
+df_percent.plot(kind='bar', stacked=True, ax=ax, width=0.75, edgecolor='black', zorder=3, color=colors)
+
+# 5. Apply Hatches to bars
+for i, patch_group in enumerate(ax.containers):
+    hatch = hatches[i]
+    for patch in patch_group:
+        patch.set_hatch(hatch)
+
+# 6. High-Visibility Formatting
+plt.ylabel('Coverage (%)', fontsize=18, fontweight='bold')
+plt.xlabel('', fontsize=1) # Minimal X-label space
+plt.xticks(rotation=45, ha='right', fontsize=16)
+plt.yticks(fontsize=16)
+
+# Position Legend ABOVE the chart with hatch patterns visible
+handles, labels = ax.get_legend_handles_labels()
 ax.legend(
+    handles=handles,
+    labels=labels,
     loc='lower center', 
-    bbox_to_anchor=(0.5, 1.09), 
-    ncol=4,             
-    fontsize=10, 
-    frameon=False       
+    bbox_to_anchor=(0.5, 1.12), 
+    ncol=2,             # 2x2 grid for readability
+    fontsize=14, 
+    frameon=False,
+    columnspacing=1.5
 )
 
-# Customization
-plt.ylabel('Fraction of PDPT PSC Misses Resolved by PTB (%)', fontsize=12)
-plt.xlabel('Workload', fontsize=12)
-plt.xticks(rotation=0)
-
-# 5. Add numbers inside the bars
-for c in ax.containers:
-    # Logic: Show label only if height > 3% to avoid clutter
-    labels = [f'{v.get_height():.1f}%' if v.get_height() > 3 else '' for v in c]
-    ax.bar_label(c, labels=labels, label_type='center', fontsize=9, fontweight='bold')
+# Visual polish
+plt.grid(axis='y', linestyle='--', alpha=0.4, zorder=0)
+ax.set_axisbelow(True)
 
 plt.tight_layout(rect=[0, 0, 1, 0.95]) 
 plt.show()

@@ -651,18 +651,18 @@ namespace ParametricDramDirectoryMSI{
                 CacheCntlr* prefetch_cache = cache;
                 if(mem_manager){
                     switch (pd_hit_where){
-                        case HitWhere::L1_OWN:
-                            prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::L1_DCACHE);
-                            break;
+                        // case HitWhere::L1_OWN:
+                        //     prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::L1_DCACHE);
+                        //     break;
                         case HitWhere::L2_OWN:
                             prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::L2_CACHE);
                             break;
-                        case HitWhere::L3_OWN:
-                            prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::L3_CACHE);
-                            break;
-                        case HitWhere::L4_OWN:
-                            prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::L4_CACHE);
-                            break;
+                        // case HitWhere::L3_OWN:
+                        //     prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::L3_CACHE);
+                        //     break;
+                        // case HitWhere::L4_OWN:
+                        //     prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::L4_CACHE);
+                        //     break;
                         case HitWhere::NUCA_CACHE:
                         case HitWhere::CACHE_REMOTE:
                         case HitWhere::DRAM:

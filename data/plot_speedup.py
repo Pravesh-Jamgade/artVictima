@@ -1,91 +1,129 @@
 #!/usr/bin/env python3
-"""
-Grouped bar chart:
-- x-axis: workload (includes a synthetic 'geomean' category)
-- bars: designs
-- height: speedup
-- reads from CSV with columns: design,workload,speedup
-
-Usage:
-  python3 plot_speedup.py results.csv
-  python3 plot_speedup.py results.csv --out speedup.png
-"""
-
 import argparse
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
-from scipy.stats import gmean # Import geometric mean function
+import io
+from scipy.stats import gmean
+
+raw_data = """
+ipc	design	workload
+0.0586489012	vikram	dlrm
+0.07759300972	vikram	pr
+0.06443911066	vikram	cc
+0.08828038263	vikram	sssp
+0.06903980797	vikram	gc
+0.279423814	vikram	tc
+0.4924251653	vikram	xs
+0.7050056023	vikram	rnd
+0.05865463553	vikram	bfs
+0.3460059548	vikram	bc
+0.06906556256	vikram	gen
+0.0586347082	victima	dlrm
+0.07786850832	victima	pr
+0.06336863325	victima	cc
+0.08561418564	victima	sssp
+0.0647464701	victima	gc
+0.2657779247	victima	tc
+0.5282917184	victima	xs
+0.6083603119	victima	rnd
+0.05866397974	victima	bfs
+0.3015277088	victima	bc
+0.06474612132	victima	gen
+0.05575944766	baseline	dlrm
+0.07431437562	baseline	pr
+0.06108325355	baseline	cc
+0.08398528292	baseline	sssp
+0.06379210485	baseline	gc
+0.2572936543	baseline	tc
+0.4647871536	baseline	xs
+0.5228420184	baseline	rnd
+0.05569089657	baseline	bfs
+0.3028640997	baseline	bc
+0.06375089071	baseline	gen
+0.05638350401	potm	dlrm
+0.07430508661	potm	pr
+0.06136113287	potm	cc
+0.08557897051	potm	sssp
+0.06493313271	potm	gc
+0.2658778726	potm	tc
+0.4805682148	potm	xs
+0.5085996274	potm	rnd
+0.05640083912	potm	bfs
+0.3043051033	potm	bc
+0.06492793694	potm	gen
+"""
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("csv", help="Input CSV with columns: design,workload,speedup")
-    ap.add_argument("--out", default="", help="Optional output image (png/pdf/svg). If omitted, shows window.")
-    ap.add_argument("--sort", default="workload", choices=["workload", "mean_speedup"],
-                    help="Sort workloads by name or by mean speedup across designs.")
-    ap.add_argument("--figsize", default="12,5", help='Figure size as "W,H" (inches)')
-    # Add argument to control whether to calculate and show geomean
-    ap.add_argument("--geomean", action="store_true", help="Calculate and display the geometric mean as an extra workload index.")
+    # Arguments maintained for structure even though using raw_data inside
+    ap.add_argument("csv", nargs='?', default=None, help="Input file (not used since raw_data is hardcoded)")
+    ap.add_argument("--out", default="", help="Optional output image.")
+    ap.add_argument("--sort", default="workload", choices=["workload", "mean_speedup"])
+    ap.add_argument("--figsize", default="14,6")
+    ap.add_argument("--geomean", action="store_true", default=True) # Enabled by default for research
     args = ap.parse_args()
 
-    # Read + validate
-    df = pd.read_csv(args.csv)
-    req = {"design", "workload", "speedup"}
-    missing = req - set(df.columns)
-    if missing:
-        raise SystemExit(f"Missing required columns: {sorted(missing)}")
+    # 1. Load and clean
+    df = pd.read_csv(io.StringIO(raw_data), sep=r"\s+")
+    
+    # FIX: Rename 'ipc' to 'speedup' so logic works
+    if 'ipc' in df.columns:
+        df = df.rename(columns={'ipc': 'speedup'})
 
-    df = df.copy()
     df["design"] = df["design"].astype(str).str.strip()
     df["workload"] = df["workload"].astype(str).str.strip()
     df["speedup"] = pd.to_numeric(df["speedup"], errors="coerce")
     df = df.dropna(subset=["speedup"])
 
-    # Pivot to wide for grouped bars
+    # 2. Pivot to workload x design
     wide = df.pivot_table(index="workload", columns="design", values="speedup", aggfunc="mean")
 
-    # Sort workloads (sort happens on the index, which now includes 'Geomean' if added)
+    # FIX: Normalize to 'baseline' if baseline exists
+    if 'baseline' in wide.columns:
+        wide = wide.div(wide['baseline'], axis=0)
+
+    # 3. Sort
     if args.sort == "mean_speedup":
-        # Note: Sorting by mean speedup will place the 'Geomean' row wherever it naturally sorts
         wide = wide.loc[wide.mean(axis=1).sort_values(ascending=False).index]
     else:
-        # If sorting by workload name, 'Geomean' might appear alphabetically
         wide = wide.sort_index()
-        # You might need extra logic here to force 'Geomean' to the bottom if desired
 
-
-    # --- Calculate Geometric Mean and add as a new index (row) ---
+    # 4. Calculate Geomean
     if args.geomean:
-        # Calculate the geometric mean across all workloads for each design (axis=0)
-        # Use gmean from scipy.stats, but ensure data is non-negative (speedups usually are)
-        # We wrap in a try-except to handle potential issues if gmean fails (e.g. negative speedups)
-        try:
-            geomean_series = wide.apply(gmean, axis=0)
-            geomean_series.name = "geomean" # Name the new index (row label)
-            # Append the geomean as a new row to the DataFrame
-            wide = pd.concat([wide, geomean_series.to_frame().T])
-        except Exception as e:
-            print(f"Warning: Could not calculate geometric mean. Ensure speedup values are positive. Error: {e}")
+        actual_workloads = wide.index[wide.index.str.lower() != 'geomean']
+        geomean_series = wide.loc[actual_workloads].apply(gmean, axis=0)
+        geomean_series.name = "geomean"
+        wide = wide.drop("geomean", errors="ignore")
+        wide = pd.concat([wide, geomean_series.to_frame().T])
 
-    
-    # Keep a stable design order if you want
-    preferred = ["utopia", "potm", "victima", "ptbpd", "geomean"]
+    # 5. Column Ordering
+    preferred = ["baseline", "ptb", "vikram", "potm", "victima", "utopia"]
     cols = [c for c in preferred if c in wide.columns] + [c for c in wide.columns if c not in preferred]
     wide = wide[cols]
 
-    # Plot
+    # --- PLOTTING ---
     W, H = (float(x) for x in args.figsize.split(","))
-    ax = wide.plot(kind="bar", figsize=(W, H))
+    ax = wide.plot(kind="bar", figsize=(W, H), width=0.8, zorder=3)
 
-    ax.set_xlabel("Workload")
-    ax.set_ylabel("Speedup (%)" if wide.values.max() > 2 else "Speedup")
-    ax.axhline(1.0, color='red', linestyle='--', linewidth=1) # Baseline should likely be 1.0 for speedup
-    ax.axhline(0.0, linewidth=0.5, color='grey') 
+    plt.ylabel("Normalized IPC (Speedup)", fontsize=20, fontweight='bold')
+    plt.xlabel("Workload", fontsize=20, fontweight='bold')
+    plt.xticks(rotation=45, ha='right', fontsize=16)
+    plt.yticks(fontsize=16)
+    
+    ax.grid(axis='y', linestyle='--', alpha=0.5, zorder=0)
+    ax.set_axisbelow(True)
+    ax.axhline(1.0, color='black', linestyle='-', linewidth=2.0, zorder=4) 
 
-    # Make it readable
-    plt.xticks(rotation=45, ha='right') # Rotate x-labels to fit 'Geomean' and workloads
-    ax.legend(title="Design", ncol=min(4, len(wide.columns)), frameon=False)
-    plt.tight_layout()
+    ax.legend(
+        loc='lower center',
+        bbox_to_anchor=(0.5, 1.1),
+        ncol=len(wide.columns),
+        fontsize=15,
+        frameon=False
+    )
+
+    plt.tight_layout(rect=[0, 0, 1, 0.95])
 
     if args.out:
         plt.savefig(args.out, dpi=300, bbox_inches="tight")
