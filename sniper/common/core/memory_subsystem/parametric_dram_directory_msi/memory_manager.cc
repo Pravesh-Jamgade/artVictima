@@ -1551,6 +1551,7 @@
       void
       MemoryManager::measureNucaStats()
       {
+         if(m_nuca_cache)
          m_nuca_cache->measureStats();
       }
 
