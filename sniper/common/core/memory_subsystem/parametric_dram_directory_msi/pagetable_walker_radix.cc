@@ -422,7 +422,8 @@ namespace ParametricDramDirectoryMSI{
                         cache_address, 0,
                         data_buf, data_length,
                         modeled,
-                        count, CacheBlockInfo::block_type_t::PAGE_TABLE, SubsecondTime::Zero(),shadow_cache, Core::mem_origin_t::PML4_ACCESS); 
+                        count, CacheBlockInfo::block_type_t::PAGE_TABLE, SubsecondTime::Zero(), shadow_cache,
+                        Core::mem_origin_t::PML4_ACCESS, address); 
                     
                     addresses.push_back((IntPtr)(&starting_table->entries[a1]));
 
@@ -598,7 +599,8 @@ namespace ParametricDramDirectoryMSI{
                         cache_address, 0,
                         data_buf, data_length,
                         modeled,
-                        count, CacheBlockInfo::block_type_t::PAGE_TABLE, SubsecondTime::Zero(), nullptr, radix_origin);
+                        count, CacheBlockInfo::block_type_t::PAGE_TABLE, SubsecondTime::Zero(), nullptr,
+                        radix_origin, address);
 
                         // std::cout << "PTW Level " << level << " Access Address: 0x" << std::hex << cache_address 
                         //           << " HitWhere: " << HitWhereString(hit_where) << std::dec << std::endl;
@@ -927,6 +929,15 @@ namespace ParametricDramDirectoryMSI{
             : 0.0;
         double cpi_on_stlb_miss = 1.0 + stall_cycles_per_instruction;
         double avg_stall_cycles = walks ? static_cast<double>(SubsecondTime::divideRounded(total_walk_latency, period)) / walks : 0.0;
+        UInt64 tempo_overlap_samples = 0;
+        UInt64 tempo_overlap_ready = 0;
+        UInt64 tempo_overlap_ratio_sum_milli = 0;
+        UInt64 tempo_overlap_tail_cycles_sum = 0;
+        if(cache)
+            cache->getTempoOverlapStats(tempo_overlap_samples,
+                                        tempo_overlap_ready,
+                                        tempo_overlap_ratio_sum_milli,
+                                        tempo_overlap_tail_cycles_sum);
 
         String stats_output_path = Sim()->getConfig()->formatOutputFileName(String(("proposed"+std::to_string(core_id)+".stats").c_str()));
         FILE *stats_fp = fopen(stats_output_path.c_str(), "a");
@@ -1018,6 +1029,20 @@ namespace ParametricDramDirectoryMSI{
                         core_id, avg_overlap_ratio, overlap_samples);
                 fprintf(stats_fp, "[Core %d] proposed PTB overlap ready rate: %.2f%% (%" PRIu64 "/%" PRIu64 ")\n",
                         core_id, overlap_ready_pct, overlap_ready, overlap_samples);
+            }
+            if(tempo_overlap_samples > 0){
+                double tempo_avg_ratio = static_cast<double>(tempo_overlap_ratio_sum_milli)
+                    / static_cast<double>(tempo_overlap_samples) / 1000.0;
+                double tempo_ready_pct = static_cast<double>(tempo_overlap_ready)
+                    / static_cast<double>(tempo_overlap_samples) * 100.0;
+                double tempo_avg_tail = static_cast<double>(tempo_overlap_tail_cycles_sum)
+                    / static_cast<double>(tempo_overlap_samples);
+                fprintf(stats_fp, "[Core %d] proposed TEMPO overlap ratio avg: %.4f (samples %" PRIu64 ")\n",
+                        core_id, tempo_avg_ratio, tempo_overlap_samples);
+                fprintf(stats_fp, "[Core %d] proposed TEMPO overlap ready rate: %.2f%% (%" PRIu64 "/%" PRIu64 ")\n",
+                        core_id, tempo_ready_pct, tempo_overlap_ready, tempo_overlap_samples);
+                fprintf(stats_fp, "[Core %d] proposed TEMPO overlap tail cycles avg: %.2f\n",
+                        core_id, tempo_avg_tail);
             }
             fclose(stats_fp);
         }
@@ -1121,6 +1146,19 @@ namespace ParametricDramDirectoryMSI{
                 fprintf(csv_fp, "proposed_PTB_overlap_ratio_avg,%.4f\n", avg_overlap_ratio);
                 overlap_ratio_histogram.printCsvCdf(csv_fp, "proposed_PTB_overlap_ratio_milli");
                 overlap_tail_latency_histogram.printCsv(csv_fp, "proposed_PTB_overlap_tail_latency_cycles");
+            }
+            if(tempo_overlap_samples > 0){
+                double tempo_avg_ratio = static_cast<double>(tempo_overlap_ratio_sum_milli)
+                    / static_cast<double>(tempo_overlap_samples) / 1000.0;
+                double tempo_ready_pct = static_cast<double>(tempo_overlap_ready)
+                    / static_cast<double>(tempo_overlap_samples) * 100.0;
+                double tempo_avg_tail = static_cast<double>(tempo_overlap_tail_cycles_sum)
+                    / static_cast<double>(tempo_overlap_samples);
+                fprintf(csv_fp, "proposed_TEMPO_overlap_samples,%" PRIu64 "\n", tempo_overlap_samples);
+                fprintf(csv_fp, "proposed_TEMPO_overlap_successes,%" PRIu64 "\n", tempo_overlap_ready);
+                fprintf(csv_fp, "proposed_TEMPO_overlap_success_rate_pct,%.2f\n", tempo_ready_pct);
+                fprintf(csv_fp, "proposed_TEMPO_overlap_ratio_avg,%.4f\n", tempo_avg_ratio);
+                fprintf(csv_fp, "proposed_TEMPO_overlap_tail_cycles_avg,%.2f\n", tempo_avg_tail);
             }
 
             for(int i=0; i< HitWhere::NUM_HITWHERES; i++){
