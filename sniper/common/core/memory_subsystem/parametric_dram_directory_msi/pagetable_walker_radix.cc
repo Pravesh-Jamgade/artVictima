@@ -215,6 +215,8 @@ namespace ParametricDramDirectoryMSI{
         rob_stall_psc_level_cycles.resize(number_of_levels, 0);
         psc_accesses = 0;
         psc_misses = 0;
+        pde_dram_requests = 0;
+        pte_dram_requests = 0;
         for (auto &row : ptb_pdpt_combo_counts)
             row.fill(0);
         rob_stall_stlb_miss_cycles = 0;
@@ -251,6 +253,8 @@ namespace ParametricDramDirectoryMSI{
         }
         registerStatsMetric(name, core_id, "psc_accesses_proposed", &psc_accesses);
         registerStatsMetric(name, core_id, "psc_misses_total_proposed", &psc_misses);
+        registerStatsMetric(name, core_id, "pde_dram_requests", &pde_dram_requests);
+        registerStatsMetric(name, core_id, "pte_dram_requests", &pte_dram_requests);
         registerStatsMetric(name, core_id, "rob_stall_stlb_miss_cycles", &rob_stall_stlb_miss_cycles);
         registerStatsMetric(name, core_id, "ptw_traversal_paths_unique_proposed", &traversal_paths_unique_count);
         // registerStatsMetric(name, core_id, "tlb_miss_service_latency_histogram_proposed", &stlb_miss_latency_histogram);
@@ -510,6 +514,7 @@ namespace ParametricDramDirectoryMSI{
             SubsecondTime t_start;
             SubsecondTime total_latency;
             HitWhere::where_t pd_hit_where = HitWhere::UNKNOWN;
+            HitWhere::where_t level_hit_where = HitWhere::UNKNOWN;
             
             for (int i = stats_radix.number_of_levels; i >= level; i--)
             {
@@ -614,10 +619,23 @@ namespace ParametricDramDirectoryMSI{
                     
                     addresses.push_back((IntPtr)(&new_table->entries[a1]));
 
+                    level_hit_where = hit_where;
                     mem_manager->tagCachesBlockType(cache_address,CacheBlockInfo::block_type_t::PAGE_TABLE);
                     recordLevelStats(level-1, total_latency, &hit_where);
                     if(level_index == stats_radix.number_of_levels - 2)
                         pd_hit_where = hit_where;
+                    if(level_index == stats_radix.number_of_levels - 2
+                        && (hit_where == HitWhere::DRAM
+                            || hit_where == HitWhere::DRAM_LOCAL
+                            || hit_where == HitWhere::DRAM_REMOTE
+                            || hit_where == HitWhere::DRAM_CACHE))
+                        pde_dram_requests++;
+                    if(level_index == stats_radix.number_of_levels - 1
+                        && (hit_where == HitWhere::DRAM
+                            || hit_where == HitWhere::DRAM_LOCAL
+                            || hit_where == HitWhere::DRAM_REMOTE
+                            || hit_where == HitWhere::DRAM_CACHE))
+                        pte_dram_requests++;
                     if(page_walk_cache_enabled && count){
                         recordPscMiss(level_index, total_latency, hit_where);
                     }
@@ -642,10 +660,28 @@ namespace ParametricDramDirectoryMSI{
                 return total_latency;
             }
             
-            bool pd_level = (level_index == stats_radix.number_of_levels - 2);
-            bool pd_psc_miss = early_fetch_enabled && pd_level && !pwc_hit;
+            bool pde_level = (level_index == stats_radix.number_of_levels - 2);
+            bool pte_level = (level_index == stats_radix.number_of_levels - 1);
+            bool dram_hit = (level_hit_where == HitWhere::DRAM
+                || level_hit_where == HitWhere::DRAM_LOCAL
+                || level_hit_where == HitWhere::DRAM_REMOTE
+                || level_hit_where == HitWhere::DRAM_CACHE);
+            bool pd_psc_miss = early_fetch_enabled && pde_level && !pwc_hit;
 
-            // Prefetch the leaf PTE after a PD-level PSC miss (hit or page-fault path).
+            if(dram_hit && (pde_level || pte_level)){
+                DramTranslationBufferEntry dram_entry = {
+                    ((IntPtr)(&new_table->entries[a1])) & (~((64 - 1))),
+                    level,
+                    t_start,
+                    t_start + total_latency,
+                    level_hit_where
+                };
+                dram_translation_buffer.push_back(dram_entry);
+                if(dram_translation_buffer.size() > 128)
+                    dram_translation_buffer.pop_front();
+            }
+
+            // Keep legacy early-fetch path available, but only when enabled via config.
             if (pd_psc_miss
                 && new_table->entries[a1].entry_type == ptw_table_entry_type::PTW_TABLE_POINTER
                 && new_table->entries[a1].next_level_table)
@@ -653,18 +689,9 @@ namespace ParametricDramDirectoryMSI{
                 CacheCntlr* prefetch_cache = cache;
                 if(mem_manager){
                     switch (pd_hit_where){
-                        // case HitWhere::L1_OWN:
-                        //     prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::L1_DCACHE);
-                        //     break;
                         case HitWhere::L2_OWN:
                             prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::L2_CACHE);
                             break;
-                        // case HitWhere::L3_OWN:
-                        //     prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::L3_CACHE);
-                        //     break;
-                        // case HitWhere::L4_OWN:
-                        //     prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::L4_CACHE);
-                        //     break;
                         case HitWhere::NUCA_CACHE:
                         case HitWhere::CACHE_REMOTE:
                         case HitWhere::DRAM:
@@ -684,7 +711,7 @@ namespace ParametricDramDirectoryMSI{
                             break;
                     }
                 }
-                
+
                 if(!prefetch_cache)
                 {
                     return total_latency+InitializeWalkRecursive(eip,address,level+1,new_table->entries[a1].next_level_table,lock_signal,data_buf,data_length,modeled,count, traversal_path, allow_psc_lookup && !pd_psc_miss, psc_state, ptb_hit);
@@ -692,12 +719,13 @@ namespace ParametricDramDirectoryMSI{
 
                 std::vector<uint64_t> vpn_indices = computeVpnIndices(address);
                 uint64_t leaf_index = vpn_indices.back();
+                // Compute the leaf PTE address using the 9-bit PT index from VPN.
                 ptw_table* leaf_table = new_table->entries[a1].next_level_table;
                 IntPtr leaf_address = ((IntPtr)(&leaf_table->entries[leaf_index])) & (~((64 - 1)));
                 SubsecondTime prefetch_time = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
                 bool pushed = prefetch_cache->enqueuePrefetch(leaf_address, prefetch_time);
                 if(pushed)
-                {   
+                {
                     prefetch_cache->Prefetch(eip, prefetch_time);
                     EarlyFetchMetadata early_fetch_metadata = prefetch_cache->get_prefetch_metadata(leaf_address);
                     pwc->lookup(leaf_address, prefetch_time, true, level + 1, false);
@@ -716,6 +744,41 @@ namespace ParametricDramDirectoryMSI{
                     }
                 }
                 m_shmem_perf_model->setElapsedTime(ShmemPerfModel::_USER_THREAD, prefetch_time);
+            }
+            // Default path: issue PDE-driven PTE DRAM queue request when early-fetch path is disabled.
+            else if(pde_level
+                && dram_hit
+                && new_table->entries[a1].entry_type == ptw_table_entry_type::PTW_TABLE_POINTER
+                && new_table->entries[a1].next_level_table)
+            {
+                CacheCntlr* dram_queue_cache = cache;
+                if(mem_manager)
+                    dram_queue_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::LAST_LEVEL_CACHE);
+
+                if(dram_queue_cache){
+                    std::vector<uint64_t> vpn_indices = computeVpnIndices(address);
+                    uint64_t leaf_index = vpn_indices.back();
+                    // Compute the leaf PTE address using the 9-bit PT index from VPN.
+                    ptw_table* leaf_table = new_table->entries[a1].next_level_table;
+                    IntPtr leaf_address = ((IntPtr)(&leaf_table->entries[leaf_index])) & (~((64 - 1)));
+                    SubsecondTime dram_issue = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
+                    bool pushed = dram_queue_cache->enqueuePrefetch(leaf_address, dram_issue);
+                    if(pushed){
+                        dram_queue_cache->Prefetch(eip, dram_issue);
+                        EarlyFetchMetadata metadata = dram_queue_cache->get_prefetch_metadata(leaf_address);
+                        DramTranslationBufferEntry pte_entry = {
+                            leaf_address,
+                            level + 1,
+                            metadata.m_last_prefetch_issue,
+                            metadata.m_last_prefetch_done,
+                            metadata.hit_where
+                        };
+                        dram_translation_buffer.push_back(pte_entry);
+                        if(dram_translation_buffer.size() > 128)
+                            dram_translation_buffer.pop_front();
+                    }
+                    m_shmem_perf_model->setElapsedTime(ShmemPerfModel::_USER_THREAD, dram_issue);
+                }
             }
 
             return total_latency+InitializeWalkRecursive(eip,address,level+1,new_table->entries[a1].next_level_table,lock_signal,data_buf,data_length,modeled,count, traversal_path, allow_psc_lookup && !pd_psc_miss, psc_state, ptb_hit);
