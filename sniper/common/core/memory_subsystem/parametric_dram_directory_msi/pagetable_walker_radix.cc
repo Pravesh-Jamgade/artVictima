@@ -682,7 +682,73 @@ namespace ParametricDramDirectoryMSI{
             }
 
             // Keep legacy early-fetch path available, but only when enabled via config.
-            if ((pd_psc_miss || (pde_level && dram_hit))
+            if (pd_psc_miss
+                && new_table->entries[a1].entry_type == ptw_table_entry_type::PTW_TABLE_POINTER
+                && new_table->entries[a1].next_level_table)
+            {
+                std::vector<uint64_t> vpn_indices = computeVpnIndices(address);
+                uint64_t leaf_index = vpn_indices.back();
+                // Compute the leaf PTE address using the 9-bit PT index from VPN.
+                ptw_table* leaf_table = new_table->entries[a1].next_level_table;
+                IntPtr leaf_address = ((IntPtr)(&leaf_table->entries[leaf_index])) & (~((64 - 1)));
+
+                CacheCntlr* prefetch_cache = cache;
+                if(mem_manager){
+                    switch (pd_hit_where){
+                        case HitWhere::L2_OWN:
+                            prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::L2_CACHE);
+                            break;
+                        case HitWhere::NUCA_CACHE:
+                        case HitWhere::CACHE_REMOTE:
+                        case HitWhere::DRAM:
+                        case HitWhere::DRAM_LOCAL:
+                        case HitWhere::DRAM_REMOTE:
+                        case HitWhere::DRAM_CACHE:
+                            prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::LAST_LEVEL_CACHE);
+                            break;
+                        case HitWhere::MISS:
+                        case HitWhere::SIBLING:
+                        case HitWhere::L1_SIBLING:
+                        case HitWhere::L2_SIBLING:
+                        case HitWhere::L3_SIBLING:
+                        case HitWhere::L4_SIBLING:
+                        default:
+                            prefetch_cache = cache;
+                            break;
+                    }
+                }
+
+                if(!prefetch_cache)
+                {
+                    return total_latency+InitializeWalkRecursive(eip,address,level+1,new_table->entries[a1].next_level_table,lock_signal,data_buf,data_length,modeled,count, traversal_path, allow_psc_lookup && !pd_psc_miss, psc_state, ptb_hit);
+                }
+
+                SubsecondTime prefetch_time = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
+                bool pushed = prefetch_cache->enqueuePrefetch(leaf_address, prefetch_time);
+                if(pushed)
+                {
+                    prefetch_cache->Prefetch(eip, prefetch_time);
+                    EarlyFetchMetadata early_fetch_metadata = prefetch_cache->get_prefetch_metadata(leaf_address);
+                    pwc->lookup(leaf_address, prefetch_time, true, level + 1, false);
+
+                    SubsecondTime prefetch_issue = early_fetch_metadata.m_last_prefetch_issue;
+                    SubsecondTime prefetch_done = early_fetch_metadata.m_last_prefetch_done;
+                    uint64_t delta = (prefetch_done > prefetch_issue)
+                        ? SubsecondTime::divideRounded(prefetch_done - prefetch_issue, core->getDvfsDomain()->getPeriod())
+                        : 0;
+                    prefeth_latency[early_fetch_metadata.hit_where].update(delta);
+                    if(count){
+                        overlap_prefetch_state.valid = true;
+                        overlap_prefetch_state.leaf_cache_line = leaf_address;
+                        overlap_prefetch_state.t_issue = prefetch_issue;
+                        overlap_prefetch_state.t_done = prefetch_done;
+                    }
+                }
+                m_shmem_perf_model->setElapsedTime(ShmemPerfModel::_USER_THREAD, prefetch_time);
+            }
+            // Direct DRAM datapath: soft-lookup cache hierarchy before issuing DRAM queue request.
+            else if(pde_level
+                && dram_hit
                 && new_table->entries[a1].entry_type == ptw_table_entry_type::PTW_TABLE_POINTER
                 && new_table->entries[a1].next_level_table)
             {
@@ -701,92 +767,33 @@ namespace ParametricDramDirectoryMSI{
                     bool in_l1 = has_line(MemComponent::L1_DCACHE);
                     bool in_l2 = has_line(MemComponent::L2_CACHE);
                     bool in_llc = has_line(MemComponent::LAST_LEVEL_CACHE);
-                    // Soft lookup: issue the real early-fetch/DRAM request only when PTE data is not in cache hierarchy.
+                    // Soft lookup only for the direct DRAM data path.
                     pte_only_in_dram = !(in_l1 || in_l2 || in_llc);
                 }
 
                 if(pte_only_in_dram){
-                    if (pd_psc_miss){
-                        CacheCntlr* prefetch_cache = cache;
-                        if(mem_manager){
-                            switch (pd_hit_where){
-                                case HitWhere::L2_OWN:
-                                    prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::L2_CACHE);
-                                    break;
-                                case HitWhere::NUCA_CACHE:
-                                case HitWhere::CACHE_REMOTE:
-                                case HitWhere::DRAM:
-                                case HitWhere::DRAM_LOCAL:
-                                case HitWhere::DRAM_REMOTE:
-                                case HitWhere::DRAM_CACHE:
-                                    prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::LAST_LEVEL_CACHE);
-                                    break;
-                                case HitWhere::MISS:
-                                case HitWhere::SIBLING:
-                                case HitWhere::L1_SIBLING:
-                                case HitWhere::L2_SIBLING:
-                                case HitWhere::L3_SIBLING:
-                                case HitWhere::L4_SIBLING:
-                                default:
-                                    prefetch_cache = cache;
-                                    break;
-                            }
-                        }
+                    CacheCntlr* dram_queue_cache = cache;
+                    if(mem_manager)
+                        dram_queue_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::LAST_LEVEL_CACHE);
 
-                        if(!prefetch_cache)
-                        {
-                            return total_latency+InitializeWalkRecursive(eip,address,level+1,new_table->entries[a1].next_level_table,lock_signal,data_buf,data_length,modeled,count, traversal_path, allow_psc_lookup && !pd_psc_miss, psc_state, ptb_hit);
+                    if(dram_queue_cache){
+                        SubsecondTime dram_issue = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
+                        bool pushed = dram_queue_cache->enqueuePrefetch(leaf_address, dram_issue);
+                        if(pushed){
+                            dram_queue_cache->Prefetch(eip, dram_issue);
+                            EarlyFetchMetadata metadata = dram_queue_cache->get_prefetch_metadata(leaf_address);
+                            DramTranslationBufferEntry pte_entry = {
+                                leaf_address,
+                                level + 1,
+                                metadata.m_last_prefetch_issue,
+                                metadata.m_last_prefetch_done,
+                                metadata.hit_where
+                            };
+                            dram_translation_buffer.push_back(pte_entry);
+                            if(dram_translation_buffer.size() > 128)
+                                dram_translation_buffer.pop_front();
                         }
-
-                        SubsecondTime prefetch_time = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
-                        bool pushed = prefetch_cache->enqueuePrefetch(leaf_address, prefetch_time);
-                        if(pushed)
-                        {
-                            prefetch_cache->Prefetch(eip, prefetch_time);
-                            EarlyFetchMetadata early_fetch_metadata = prefetch_cache->get_prefetch_metadata(leaf_address);
-                            pwc->lookup(leaf_address, prefetch_time, true, level + 1, false);
-
-                            SubsecondTime prefetch_issue = early_fetch_metadata.m_last_prefetch_issue;
-                            SubsecondTime prefetch_done = early_fetch_metadata.m_last_prefetch_done;
-                            uint64_t delta = (prefetch_done > prefetch_issue)
-                                ? SubsecondTime::divideRounded(prefetch_done - prefetch_issue, core->getDvfsDomain()->getPeriod())
-                                : 0;
-                            prefeth_latency[early_fetch_metadata.hit_where].update(delta);
-                            if(count){
-                                overlap_prefetch_state.valid = true;
-                                overlap_prefetch_state.leaf_cache_line = leaf_address;
-                                overlap_prefetch_state.t_issue = prefetch_issue;
-                                overlap_prefetch_state.t_done = prefetch_done;
-                            }
-                        }
-                        m_shmem_perf_model->setElapsedTime(ShmemPerfModel::_USER_THREAD, prefetch_time);
-                    }
-                    // Default path: issue PDE-driven PTE DRAM queue request when early-fetch path is disabled.
-                    else if(pde_level && dram_hit)
-                    {
-                        CacheCntlr* dram_queue_cache = cache;
-                        if(mem_manager)
-                            dram_queue_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::LAST_LEVEL_CACHE);
-
-                        if(dram_queue_cache){
-                            SubsecondTime dram_issue = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
-                            bool pushed = dram_queue_cache->enqueuePrefetch(leaf_address, dram_issue);
-                            if(pushed){
-                                dram_queue_cache->Prefetch(eip, dram_issue);
-                                EarlyFetchMetadata metadata = dram_queue_cache->get_prefetch_metadata(leaf_address);
-                                DramTranslationBufferEntry pte_entry = {
-                                    leaf_address,
-                                    level + 1,
-                                    metadata.m_last_prefetch_issue,
-                                    metadata.m_last_prefetch_done,
-                                    metadata.hit_where
-                                };
-                                dram_translation_buffer.push_back(pte_entry);
-                                if(dram_translation_buffer.size() > 128)
-                                    dram_translation_buffer.pop_front();
-                            }
-                            m_shmem_perf_model->setElapsedTime(ShmemPerfModel::_USER_THREAD, dram_issue);
-                        }
+                        m_shmem_perf_model->setElapsedTime(ShmemPerfModel::_USER_THREAD, dram_issue);
                     }
                 }
             }
