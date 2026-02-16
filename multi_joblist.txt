@@ -191,3 +191,102 @@ CMD=docker run --rm -v "/home/pravesh/artVictima/":/app --mount type=bind,src="/
 LABEL=vikram_both_gen
 CMD=docker run --rm -v "/home/pravesh/artVictima/":/app --mount type=bind,src="/mnt/usb-Samsung_PSSD_T9_S743NS0X301609D-0:0-part1/pravesh/sniper_traces/traces/",target=/app/traces/ "docker.io/kanell21/artifact_evaluation:victima"  /app/sniper/run-sniper -s stop-by-icount:500000000 --genstats --power -d /app/results/vikram_both/gen -c /app/sniper/config/virtual_memory_configs/vikram_both.cfg --traces=/app/traces/gen.sift > results/vikram_both/gen.out 2> results/vikram_both/gen.err
 
+LABEL=vikram_ptb_NL2_bc
+CMD=docker run --rm -v "/home/pravesh/artVictima/":/app --mount type=bind,src="/mnt/usb-Samsung_PSSD_T9_S743NS0X301609D-0:0-part1/pravesh/sniper_traces/traces/",target=/app/traces/ "docker.io/kanell21/artifact_evaluation:victima"  /app/sniper/run-sniper -s stop-by-icount:500000000 --genstats --power -d /app/results/vikram_ptb_NL2/bc -c /app/sniper/config/virtual_memory_configs/vikram_ptb_NL2.cfg --traces=/app/traces/bc.sift > results/vikram_ptb_NL2/bc.out 2> results/vikram_ptb_NL2/bc.err
+
+LABEL=vikram_ptb_NL2_bfs
+CMD=docker run --rm -v "/home/pravesh/artVictima/":/app --mount type=bind,src="/mnt/usb-Samsung_PSSD_T9_S743NS0X301609D-0:0-part1/pravesh/sniper_traces/traces/",target=/app/traces/ "docker.io/kanell21/artifact_evaluation:victima"  /app/sniper/run-sniper -s stop-by-icount:500000000 --genstats --power -d /app/results/vikram_ptb_NL2/bfs -c /app/sniper/config/virtual_memory_configs/vikram_ptb_NL2.cfg --traces=/app/traces/bfs.sift > results/vikram_ptb_NL2/bfs.out 2> results/vikram_ptb_NL2/bfs.err
+
+LABEL=vikram_ptb_NL2_cc
+CMD=docker run --rm -v "/home/pravesh/artVictima/":/app --mount type=bind,src="/mnt/usb-Samsung_PSSD_T9_S743NS0X301609D-0:0-part1/pravesh/sniper_traces/traces/",target=/app/traces/ "docker.io/kanell21/artifact_evaluation:victima"  /app/sniper/run-sniper -s stop-by-icount:500000000 --genstats --power -d /app/results/vikram_ptb_NL2/cc -c /app/sniper/config/virtual_memory_configs/vikram_ptb_NL2.cfg --traces=/app/traces/cc.sift > results/vikram_ptb_NL2/cc.out 2> results/vikram_ptb_NL2/cc.err
+
+LABEL=vikram_ptb_NL2_tc
+CMD=docker run --rm -v "/home/pravesh/artVictima/":/app --mount type=bind,src="/mnt/usb-Samsung_PSSD_T9_S743NS0X301609D-0:0-part1/pravesh/sniper_traces/traces/",target=/app/traces/ "docker.io/kanell21/artifact_evaluation:victima"  /app/sniper/run-sniper -s stop-by-icount:500000000 --genstats --power -d /app/results/vikram_ptb_NL2/tc -c /app/sniper/config/virtual_memory_configs/vikram_ptb_NL2.cfg --traces=/app/traces/tc.sift > results/vikram_ptb_NL2/tc.out 2> results/vikram_ptb_NL2/tc.err
+
+LABEL=vikram_ptb_NL2_gc
+CMD=docker run --rm -v "/home/pravesh/artVictima/":/app --mount type=bind,src="/mnt/usb-Samsung_PSSD_T9_S743NS0X301609D-0:0-part1/pravesh/sniper_traces/traces/",target=/app/traces/ "docker.io/kanell21/artifact_evaluation:victima"  /app/sniper/run-sniper -s stop-by-icount:500000000 --genstats --power -d /app/results/vikram_ptb_NL2/gc -c /app/sniper/config/virtual_memory_configs/vikram_ptb_NL2.cfg --traces=/app/traces/gc.sift > results/vikram_ptb_NL2/gc.out 2> results/vikram_ptb_NL2/gc.err
+
+LABEL=vikram_ptb_NL2_pr
+CMD=docker run --rm -v "/home/pravesh/artVictima/":/app --mount type=bind,src="/mnt/usb-Samsung_PSSD_T9_S743NS0X301609D-0:0-part1/pravesh/sniper_traces/traces/",target=/app/traces/ "docker.io/kanell21/artifact_evaluation:victima"  /app/sniper/run-sniper -s stop-by-icount:500000000 --genstats --power -d /app/results/vikram_ptb_NL2/pr -c /app/sniper/config/virtual_memory_configs/vikram_ptb_NL2.cfg --traces=/app/traces/pr.sift > results/vikram_ptb_NL2/pr.out 2> results/vikram_ptb_NL2/pr.err
+
+LABEL=vikram_ptb_NL2_sssp
+CMD=docker run --rm -v "/home/pravesh/artVictima/":/app --mount type=bind,src="/mnt/usb-Samsung_PSSD_T9_S743NS0X301609D-0:0-part1/pravesh/sniper_traces/traces/",target=/app/traces/ "docker.io/kanell21/artifact_evaluation:victima"  /app/sniper/run-sniper -s stop-by-icount:500000000 --genstats --power -d /app/results/vikram_ptb_NL2/sssp -c /app/sniper/config/virtual_memory_configs/vikram_ptb_NL2.cfg --traces=/app/traces/sssp.sift > results/vikram_ptb_NL2/sssp.out 2> results/vikram_ptb_NL2/sssp.err
+
+LABEL=vikram_ptb_NL2_rnd
+CMD=docker run --rm -v "/home/pravesh/artVictima/":/app --mount type=bind,src="/mnt/usb-Samsung_PSSD_T9_S743NS0X301609D-0:0-part1/pravesh/sniper_traces/traces/",target=/app/traces/ "docker.io/kanell21/artifact_evaluation:victima"  /app/sniper/run-sniper -s stop-by-icount:500000000 --genstats --power -d /app/results/vikram_ptb_NL2/rnd -c /app/sniper/config/virtual_memory_configs/vikram_ptb_NL2.cfg --traces=/app/traces/rnd.sift > results/vikram_ptb_NL2/rnd.out 2> results/vikram_ptb_NL2/rnd.err
+
+LABEL=vikram_ptb_NL2_xs
+CMD=docker run --rm -v "/home/pravesh/artVictima/":/app --mount type=bind,src="/mnt/usb-Samsung_PSSD_T9_S743NS0X301609D-0:0-part1/pravesh/sniper_traces/traces/",target=/app/traces/ "docker.io/kanell21/artifact_evaluation:victima"  /app/sniper/run-sniper -s stop-by-icount:500000000 --genstats --power -d /app/results/vikram_ptb_NL2/xs -c /app/sniper/config/virtual_memory_configs/vikram_ptb_NL2.cfg --traces=/app/traces/xs.sift > results/vikram_ptb_NL2/xs.out 2> results/vikram_ptb_NL2/xs.err
+
+LABEL=vikram_ptb_NL2_dlrm
+CMD=docker run --rm -v "/home/pravesh/artVictima/":/app --mount type=bind,src="/mnt/usb-Samsung_PSSD_T9_S743NS0X301609D-0:0-part1/pravesh/sniper_traces/traces/",target=/app/traces/ "docker.io/kanell21/artifact_evaluation:victima"  /app/sniper/run-sniper -s stop-by-icount:500000000 --genstats --power -d /app/results/vikram_ptb_NL2/dlrm -c /app/sniper/config/virtual_memory_configs/vikram_ptb_NL2.cfg --traces=/app/traces/dlrm.sift > results/vikram_ptb_NL2/dlrm.out 2> results/vikram_ptb_NL2/dlrm.err
+
+LABEL=vikram_ptb_NL2_gen
+CMD=docker run --rm -v "/home/pravesh/artVictima/":/app --mount type=bind,src="/mnt/usb-Samsung_PSSD_T9_S743NS0X301609D-0:0-part1/pravesh/sniper_traces/traces/",target=/app/traces/ "docker.io/kanell21/artifact_evaluation:victima"  /app/sniper/run-sniper -s stop-by-icount:500000000 --genstats --power -d /app/results/vikram_ptb_NL2/gen -c /app/sniper/config/virtual_memory_configs/vikram_ptb_NL2.cfg --traces=/app/traces/gen.sift > results/vikram_ptb_NL2/gen.out 2> results/vikram_ptb_NL2/gen.err
+
+LABEL=vikram_fetch_NL2_bc
+CMD=docker run --rm -v "/home/pravesh/artVictima/":/app --mount type=bind,src="/mnt/usb-Samsung_PSSD_T9_S743NS0X301609D-0:0-part1/pravesh/sniper_traces/traces/",target=/app/traces/ "docker.io/kanell21/artifact_evaluation:victima"  /app/sniper/run-sniper -s stop-by-icount:500000000 --genstats --power -d /app/results/vikram_fetch_NL2/bc -c /app/sniper/config/virtual_memory_configs/vikram_fetch_NL2.cfg --traces=/app/traces/bc.sift > results/vikram_fetch_NL2/bc.out 2> results/vikram_fetch_NL2/bc.err
+
+LABEL=vikram_fetch_NL2_bfs
+CMD=docker run --rm -v "/home/pravesh/artVictima/":/app --mount type=bind,src="/mnt/usb-Samsung_PSSD_T9_S743NS0X301609D-0:0-part1/pravesh/sniper_traces/traces/",target=/app/traces/ "docker.io/kanell21/artifact_evaluation:victima"  /app/sniper/run-sniper -s stop-by-icount:500000000 --genstats --power -d /app/results/vikram_fetch_NL2/bfs -c /app/sniper/config/virtual_memory_configs/vikram_fetch_NL2.cfg --traces=/app/traces/bfs.sift > results/vikram_fetch_NL2/bfs.out 2> results/vikram_fetch_NL2/bfs.err
+
+LABEL=vikram_fetch_NL2_cc
+CMD=docker run --rm -v "/home/pravesh/artVictima/":/app --mount type=bind,src="/mnt/usb-Samsung_PSSD_T9_S743NS0X301609D-0:0-part1/pravesh/sniper_traces/traces/",target=/app/traces/ "docker.io/kanell21/artifact_evaluation:victima"  /app/sniper/run-sniper -s stop-by-icount:500000000 --genstats --power -d /app/results/vikram_fetch_NL2/cc -c /app/sniper/config/virtual_memory_configs/vikram_fetch_NL2.cfg --traces=/app/traces/cc.sift > results/vikram_fetch_NL2/cc.out 2> results/vikram_fetch_NL2/cc.err
+
+LABEL=vikram_fetch_NL2_tc
+CMD=docker run --rm -v "/home/pravesh/artVictima/":/app --mount type=bind,src="/mnt/usb-Samsung_PSSD_T9_S743NS0X301609D-0:0-part1/pravesh/sniper_traces/traces/",target=/app/traces/ "docker.io/kanell21/artifact_evaluation:victima"  /app/sniper/run-sniper -s stop-by-icount:500000000 --genstats --power -d /app/results/vikram_fetch_NL2/tc -c /app/sniper/config/virtual_memory_configs/vikram_fetch_NL2.cfg --traces=/app/traces/tc.sift > results/vikram_fetch_NL2/tc.out 2> results/vikram_fetch_NL2/tc.err
+
+LABEL=vikram_fetch_NL2_gc
+CMD=docker run --rm -v "/home/pravesh/artVictima/":/app --mount type=bind,src="/mnt/usb-Samsung_PSSD_T9_S743NS0X301609D-0:0-part1/pravesh/sniper_traces/traces/",target=/app/traces/ "docker.io/kanell21/artifact_evaluation:victima"  /app/sniper/run-sniper -s stop-by-icount:500000000 --genstats --power -d /app/results/vikram_fetch_NL2/gc -c /app/sniper/config/virtual_memory_configs/vikram_fetch_NL2.cfg --traces=/app/traces/gc.sift > results/vikram_fetch_NL2/gc.out 2> results/vikram_fetch_NL2/gc.err
+
+LABEL=vikram_fetch_NL2_pr
+CMD=docker run --rm -v "/home/pravesh/artVictima/":/app --mount type=bind,src="/mnt/usb-Samsung_PSSD_T9_S743NS0X301609D-0:0-part1/pravesh/sniper_traces/traces/",target=/app/traces/ "docker.io/kanell21/artifact_evaluation:victima"  /app/sniper/run-sniper -s stop-by-icount:500000000 --genstats --power -d /app/results/vikram_fetch_NL2/pr -c /app/sniper/config/virtual_memory_configs/vikram_fetch_NL2.cfg --traces=/app/traces/pr.sift > results/vikram_fetch_NL2/pr.out 2> results/vikram_fetch_NL2/pr.err
+
+LABEL=vikram_fetch_NL2_sssp
+CMD=docker run --rm -v "/home/pravesh/artVictima/":/app --mount type=bind,src="/mnt/usb-Samsung_PSSD_T9_S743NS0X301609D-0:0-part1/pravesh/sniper_traces/traces/",target=/app/traces/ "docker.io/kanell21/artifact_evaluation:victima"  /app/sniper/run-sniper -s stop-by-icount:500000000 --genstats --power -d /app/results/vikram_fetch_NL2/sssp -c /app/sniper/config/virtual_memory_configs/vikram_fetch_NL2.cfg --traces=/app/traces/sssp.sift > results/vikram_fetch_NL2/sssp.out 2> results/vikram_fetch_NL2/sssp.err
+
+LABEL=vikram_fetch_NL2_rnd
+CMD=docker run --rm -v "/home/pravesh/artVictima/":/app --mount type=bind,src="/mnt/usb-Samsung_PSSD_T9_S743NS0X301609D-0:0-part1/pravesh/sniper_traces/traces/",target=/app/traces/ "docker.io/kanell21/artifact_evaluation:victima"  /app/sniper/run-sniper -s stop-by-icount:500000000 --genstats --power -d /app/results/vikram_fetch_NL2/rnd -c /app/sniper/config/virtual_memory_configs/vikram_fetch_NL2.cfg --traces=/app/traces/rnd.sift > results/vikram_fetch_NL2/rnd.out 2> results/vikram_fetch_NL2/rnd.err
+
+LABEL=vikram_fetch_NL2_xs
+CMD=docker run --rm -v "/home/pravesh/artVictima/":/app --mount type=bind,src="/mnt/usb-Samsung_PSSD_T9_S743NS0X301609D-0:0-part1/pravesh/sniper_traces/traces/",target=/app/traces/ "docker.io/kanell21/artifact_evaluation:victima"  /app/sniper/run-sniper -s stop-by-icount:500000000 --genstats --power -d /app/results/vikram_fetch_NL2/xs -c /app/sniper/config/virtual_memory_configs/vikram_fetch_NL2.cfg --traces=/app/traces/xs.sift > results/vikram_fetch_NL2/xs.out 2> results/vikram_fetch_NL2/xs.err
+
+LABEL=vikram_fetch_NL2_dlrm
+CMD=docker run --rm -v "/home/pravesh/artVictima/":/app --mount type=bind,src="/mnt/usb-Samsung_PSSD_T9_S743NS0X301609D-0:0-part1/pravesh/sniper_traces/traces/",target=/app/traces/ "docker.io/kanell21/artifact_evaluation:victima"  /app/sniper/run-sniper -s stop-by-icount:500000000 --genstats --power -d /app/results/vikram_fetch_NL2/dlrm -c /app/sniper/config/virtual_memory_configs/vikram_fetch_NL2.cfg --traces=/app/traces/dlrm.sift > results/vikram_fetch_NL2/dlrm.out 2> results/vikram_fetch_NL2/dlrm.err
+
+LABEL=vikram_fetch_NL2_gen
+CMD=docker run --rm -v "/home/pravesh/artVictima/":/app --mount type=bind,src="/mnt/usb-Samsung_PSSD_T9_S743NS0X301609D-0:0-part1/pravesh/sniper_traces/traces/",target=/app/traces/ "docker.io/kanell21/artifact_evaluation:victima"  /app/sniper/run-sniper -s stop-by-icount:500000000 --genstats --power -d /app/results/vikram_fetch_NL2/gen -c /app/sniper/config/virtual_memory_configs/vikram_fetch_NL2.cfg --traces=/app/traces/gen.sift > results/vikram_fetch_NL2/gen.out 2> results/vikram_fetch_NL2/gen.err
+
+LABEL=vikram_both_NL2_bc
+CMD=docker run --rm -v "/home/pravesh/artVictima/":/app --mount type=bind,src="/mnt/usb-Samsung_PSSD_T9_S743NS0X301609D-0:0-part1/pravesh/sniper_traces/traces/",target=/app/traces/ "docker.io/kanell21/artifact_evaluation:victima"  /app/sniper/run-sniper -s stop-by-icount:500000000 --genstats --power -d /app/results/vikram_both_NL2/bc -c /app/sniper/config/virtual_memory_configs/vikram_both_NL2.cfg --traces=/app/traces/bc.sift > results/vikram_both_NL2/bc.out 2> results/vikram_both_NL2/bc.err
+
+LABEL=vikram_both_NL2_bfs
+CMD=docker run --rm -v "/home/pravesh/artVictima/":/app --mount type=bind,src="/mnt/usb-Samsung_PSSD_T9_S743NS0X301609D-0:0-part1/pravesh/sniper_traces/traces/",target=/app/traces/ "docker.io/kanell21/artifact_evaluation:victima"  /app/sniper/run-sniper -s stop-by-icount:500000000 --genstats --power -d /app/results/vikram_both_NL2/bfs -c /app/sniper/config/virtual_memory_configs/vikram_both_NL2.cfg --traces=/app/traces/bfs.sift > results/vikram_both_NL2/bfs.out 2> results/vikram_both_NL2/bfs.err
+
+LABEL=vikram_both_NL2_cc
+CMD=docker run --rm -v "/home/pravesh/artVictima/":/app --mount type=bind,src="/mnt/usb-Samsung_PSSD_T9_S743NS0X301609D-0:0-part1/pravesh/sniper_traces/traces/",target=/app/traces/ "docker.io/kanell21/artifact_evaluation:victima"  /app/sniper/run-sniper -s stop-by-icount:500000000 --genstats --power -d /app/results/vikram_both_NL2/cc -c /app/sniper/config/virtual_memory_configs/vikram_both_NL2.cfg --traces=/app/traces/cc.sift > results/vikram_both_NL2/cc.out 2> results/vikram_both_NL2/cc.err
+
+LABEL=vikram_both_NL2_tc
+CMD=docker run --rm -v "/home/pravesh/artVictima/":/app --mount type=bind,src="/mnt/usb-Samsung_PSSD_T9_S743NS0X301609D-0:0-part1/pravesh/sniper_traces/traces/",target=/app/traces/ "docker.io/kanell21/artifact_evaluation:victima"  /app/sniper/run-sniper -s stop-by-icount:500000000 --genstats --power -d /app/results/vikram_both_NL2/tc -c /app/sniper/config/virtual_memory_configs/vikram_both_NL2.cfg --traces=/app/traces/tc.sift > results/vikram_both_NL2/tc.out 2> results/vikram_both_NL2/tc.err
+
+LABEL=vikram_both_NL2_gc
+CMD=docker run --rm -v "/home/pravesh/artVictima/":/app --mount type=bind,src="/mnt/usb-Samsung_PSSD_T9_S743NS0X301609D-0:0-part1/pravesh/sniper_traces/traces/",target=/app/traces/ "docker.io/kanell21/artifact_evaluation:victima"  /app/sniper/run-sniper -s stop-by-icount:500000000 --genstats --power -d /app/results/vikram_both_NL2/gc -c /app/sniper/config/virtual_memory_configs/vikram_both_NL2.cfg --traces=/app/traces/gc.sift > results/vikram_both_NL2/gc.out 2> results/vikram_both_NL2/gc.err
+
+LABEL=vikram_both_NL2_pr
+CMD=docker run --rm -v "/home/pravesh/artVictima/":/app --mount type=bind,src="/mnt/usb-Samsung_PSSD_T9_S743NS0X301609D-0:0-part1/pravesh/sniper_traces/traces/",target=/app/traces/ "docker.io/kanell21/artifact_evaluation:victima"  /app/sniper/run-sniper -s stop-by-icount:500000000 --genstats --power -d /app/results/vikram_both_NL2/pr -c /app/sniper/config/virtual_memory_configs/vikram_both_NL2.cfg --traces=/app/traces/pr.sift > results/vikram_both_NL2/pr.out 2> results/vikram_both_NL2/pr.err
+
+LABEL=vikram_both_NL2_sssp
+CMD=docker run --rm -v "/home/pravesh/artVictima/":/app --mount type=bind,src="/mnt/usb-Samsung_PSSD_T9_S743NS0X301609D-0:0-part1/pravesh/sniper_traces/traces/",target=/app/traces/ "docker.io/kanell21/artifact_evaluation:victima"  /app/sniper/run-sniper -s stop-by-icount:500000000 --genstats --power -d /app/results/vikram_both_NL2/sssp -c /app/sniper/config/virtual_memory_configs/vikram_both_NL2.cfg --traces=/app/traces/sssp.sift > results/vikram_both_NL2/sssp.out 2> results/vikram_both_NL2/sssp.err
+
+LABEL=vikram_both_NL2_rnd
+CMD=docker run --rm -v "/home/pravesh/artVictima/":/app --mount type=bind,src="/mnt/usb-Samsung_PSSD_T9_S743NS0X301609D-0:0-part1/pravesh/sniper_traces/traces/",target=/app/traces/ "docker.io/kanell21/artifact_evaluation:victima"  /app/sniper/run-sniper -s stop-by-icount:500000000 --genstats --power -d /app/results/vikram_both_NL2/rnd -c /app/sniper/config/virtual_memory_configs/vikram_both_NL2.cfg --traces=/app/traces/rnd.sift > results/vikram_both_NL2/rnd.out 2> results/vikram_both_NL2/rnd.err
+
+LABEL=vikram_both_NL2_xs
+CMD=docker run --rm -v "/home/pravesh/artVictima/":/app --mount type=bind,src="/mnt/usb-Samsung_PSSD_T9_S743NS0X301609D-0:0-part1/pravesh/sniper_traces/traces/",target=/app/traces/ "docker.io/kanell21/artifact_evaluation:victima"  /app/sniper/run-sniper -s stop-by-icount:500000000 --genstats --power -d /app/results/vikram_both_NL2/xs -c /app/sniper/config/virtual_memory_configs/vikram_both_NL2.cfg --traces=/app/traces/xs.sift > results/vikram_both_NL2/xs.out 2> results/vikram_both_NL2/xs.err
+
+LABEL=vikram_both_NL2_dlrm
+CMD=docker run --rm -v "/home/pravesh/artVictima/":/app --mount type=bind,src="/mnt/usb-Samsung_PSSD_T9_S743NS0X301609D-0:0-part1/pravesh/sniper_traces/traces/",target=/app/traces/ "docker.io/kanell21/artifact_evaluation:victima"  /app/sniper/run-sniper -s stop-by-icount:500000000 --genstats --power -d /app/results/vikram_both_NL2/dlrm -c /app/sniper/config/virtual_memory_configs/vikram_both_NL2.cfg --traces=/app/traces/dlrm.sift > results/vikram_both_NL2/dlrm.out 2> results/vikram_both_NL2/dlrm.err
+
+LABEL=vikram_both_NL2_gen
+CMD=docker run --rm -v "/home/pravesh/artVictima/":/app --mount type=bind,src="/mnt/usb-Samsung_PSSD_T9_S743NS0X301609D-0:0-part1/pravesh/sniper_traces/traces/",target=/app/traces/ "docker.io/kanell21/artifact_evaluation:victima"  /app/sniper/run-sniper -s stop-by-icount:500000000 --genstats --power -d /app/results/vikram_both_NL2/gen -c /app/sniper/config/virtual_memory_configs/vikram_both_NL2.cfg --traces=/app/traces/gen.sift > results/vikram_both_NL2/gen.out 2> results/vikram_both_NL2/gen.err
+

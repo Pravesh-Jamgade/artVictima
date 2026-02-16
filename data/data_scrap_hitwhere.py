@@ -7,7 +7,7 @@ from typing import List, Dict, Optional, Set
 import pandas as pd # Import pandas for aggregation
 
 # Regex patterns (same as before)
-HITWHERE_LINE_RE = re.compile(r"proposed_PSC_L4_miss_hitwhere")
+HITWHERE_LINE_RE = re.compile(r"proposed_PSC_L3_miss_hitwhere")
 METRIC_LEVEL_RE = re.compile(r"proposed_PSC_L(\d+)_miss_hitwhere")
 
 def path_tag(file_path: Path) -> str: 

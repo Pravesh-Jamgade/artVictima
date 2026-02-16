@@ -229,6 +229,11 @@ namespace ParametricDramDirectoryMSI
           Cache* l1dcache = m_manager->getCache(MemComponent::component_t::L1_DCACHE);
           Cache* l2cache = m_manager->getCache(MemComponent::component_t::L2_CACHE);
           Cache* nuca = m_manager->getNucaCache()->getCache();
+          if(nuca == nullptr)
+          {
+            nuca = m_manager->getCacheCntlrAt(m_core_id,MemComponent::component_t::LAST_LEVEL_CACHE)->getCache();
+          }
+
 
 
           CacheBlockInfo* cb_l1d = l1dcache->peekSingleLine(cache_address);

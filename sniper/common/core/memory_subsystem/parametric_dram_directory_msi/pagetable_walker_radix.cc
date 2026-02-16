@@ -528,6 +528,8 @@ namespace ParametricDramDirectoryMSI{
 			    if(page_walk_cache_enabled && allow_psc_lookup && level != (stats_radix.number_of_levels) )
                 {
                     pwc_address = (IntPtr)(&new_table->entries[a1]);
+
+                    std::cout << "Count Address Bits: va, " << std::hex << address << ", pt_addr, " << pwc_address << '\n'; 
                     pwc_where = pwc->lookup(pwc_address, t_start ,true, level, count);
                     if(count)
                         psc_accesses++;
