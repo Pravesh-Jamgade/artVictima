@@ -215,6 +215,8 @@ namespace ParametricDramDirectoryMSI{
         rob_stall_psc_level_cycles.resize(number_of_levels, 0);
         psc_accesses = 0;
         psc_misses = 0;
+        pde_dram_requests = 0;
+        pte_dram_requests = 0;
         for (auto &row : ptb_pdpt_combo_counts)
             row.fill(0);
         rob_stall_stlb_miss_cycles = 0;
@@ -223,7 +225,6 @@ namespace ParametricDramDirectoryMSI{
         last_psc_miss_hitwhere = HitWhere::where_t();
         total_walk_latency = SubsecondTime::Zero();
         total_ptb_latency = SubsecondTime::Zero();
-        early_fetch_enabled = Sim()->getCfg()->getBoolDefault("perf_model/ptb/early_fetch", false);
         overlap_samples = 0;
         overlap_ready = 0;
         overlap_ratio_sum_milli = 0;
@@ -251,6 +252,8 @@ namespace ParametricDramDirectoryMSI{
         }
         registerStatsMetric(name, core_id, "psc_accesses_proposed", &psc_accesses);
         registerStatsMetric(name, core_id, "psc_misses_total_proposed", &psc_misses);
+        registerStatsMetric(name, core_id, "pde_dram_requests", &pde_dram_requests);
+        registerStatsMetric(name, core_id, "pte_dram_requests", &pte_dram_requests);
         registerStatsMetric(name, core_id, "rob_stall_stlb_miss_cycles", &rob_stall_stlb_miss_cycles);
         registerStatsMetric(name, core_id, "ptw_traversal_paths_unique_proposed", &traversal_paths_unique_count);
         // registerStatsMetric(name, core_id, "tlb_miss_service_latency_histogram_proposed", &stlb_miss_latency_histogram);
@@ -509,7 +512,7 @@ namespace ParametricDramDirectoryMSI{
             IntPtr pwc_address;
             SubsecondTime t_start;
             SubsecondTime total_latency;
-            HitWhere::where_t pd_hit_where = HitWhere::UNKNOWN;
+            HitWhere::where_t level_hit_where = HitWhere::UNKNOWN;
             
             for (int i = stats_radix.number_of_levels; i >= level; i--)
             {
@@ -558,66 +561,141 @@ namespace ParametricDramDirectoryMSI{
                     t_start = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
                     
                     IntPtr cache_address = ((IntPtr)(&new_table->entries[a1])) & (~((64 - 1))); 
-                    if(count && overlap_prefetch_state.valid
-                        && level == stats_radix.number_of_levels
-                        && cache_address == overlap_prefetch_state.leaf_cache_line){
-                        
-                        SubsecondTime t_issue = overlap_prefetch_state.t_issue;
-                        SubsecondTime t_done  = overlap_prefetch_state.t_done;
-                        SubsecondTime t_need  = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
+                    bool pde_or_pte_level = (level_index >= stats_radix.number_of_levels - 2);
+                    SubsecondTime t_need = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
 
-                        // total prefetch duration
-                        UInt64 pte_cycles = (t_done > t_issue)
-                            ? SubsecondTime::divideRounded(t_done - t_issue, core->getDvfsDomain()->getPeriod())
-                            : 0;
-                        if(pte_cycles > 0){
-                            SubsecondTime t_overlap_end = (t_need < t_done) ? t_need : t_done;
-                            UInt64 overlap_cycles = (t_overlap_end > t_issue)
-                                ? SubsecondTime::divideRounded(t_overlap_end - t_issue, core->getDvfsDomain()->getPeriod())
-                                : 0;
-                            UInt64 tail_cycles = (t_done > t_need)
-                                ? SubsecondTime::divideRounded(t_done - t_need, core->getDvfsDomain()->getPeriod())
-                                : 0;
-                            UInt64 ratio_milli = static_cast<UInt64>((overlap_cycles * 1000ULL) / pte_cycles);
-                            overlap_ratio_histogram.update(ratio_milli);
-                            overlap_tail_latency_histogram.update(tail_cycles);
+                    // Special DRAM lane: soft lookup for PDE/PTE addresses, queue to DRAM read queue on miss.
+                    if(pde_or_pte_level && mem_manager){
+                        auto has_line = [&](MemComponent::component_t component) {
+                            CacheCntlr *cntlr = mem_manager->getCacheCntlrAt(core->getId(), component);
+                            return cntlr && cntlr->getCache() && cntlr->getCache()->peekSingleLine(cache_address);
+                        };
+                        bool in_l1 = has_line(MemComponent::L1_DCACHE);
+                        bool in_l2 = has_line(MemComponent::L2_CACHE);
+                        bool in_llc = has_line(MemComponent::LAST_LEVEL_CACHE);
+                        bool only_in_dram = !(in_l1 || in_l2 || in_llc);
 
-                            overlap_ratio_sum_milli += ratio_milli;
-                            overlap_samples++;
-                            if (t_done <= t_need)
-                                overlap_ready++;
+                        if(only_in_dram){
+                            bool already_queued = false;
+                            for (const auto &entry : dram_translation_buffer){
+                                if(entry.cache_line == cache_address && entry.level == level){
+                                    already_queued = true;
+                                    break;
+                                }
+                            }
+                            if(!already_queued){
+                                CacheCntlr* dram_queue_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::LAST_LEVEL_CACHE);
+                                if(dram_queue_cache){
+                                    SubsecondTime dram_issue = t_need;
+                                    bool pushed = dram_queue_cache->enqueuePrefetch(cache_address, dram_issue);
+                                    if(pushed){
+                                        dram_queue_cache->Prefetch(eip, dram_issue);
+                                        EarlyFetchMetadata metadata = dram_queue_cache->get_prefetch_metadata(cache_address);
+                                        DramTranslationBufferEntry dram_entry = {
+                                            cache_address,
+                                            level,
+                                            metadata.m_last_prefetch_issue,
+                                            metadata.m_last_prefetch_done,
+                                            metadata.hit_where
+                                        };
+                                        dram_translation_buffer.push_back(dram_entry);
+                                        if(dram_translation_buffer.size() > 128)
+                                            dram_translation_buffer.pop_front();
+                                    }
+                                    m_shmem_perf_model->setElapsedTime(ShmemPerfModel::_USER_THREAD, dram_issue);
+                                }
+                            }
                         }
-                        overlap_prefetch_state.valid = false;
                     }
 
                     Core::mem_origin_t radix_origin = static_cast<Core::mem_origin_t>(level);
+                    HitWhere::where_t hit_where = HitWhere::UNKNOWN;
+                    bool served_from_dram_buffer = false;
 
-                    HitWhere::where_t hit_where = cache->processMemOpFromCore(
-                        eip,
-                        lock_signal,
-                        Core::mem_op_t::READ,
-                        cache_address, 0,
-                        data_buf, data_length,
-                        modeled,
-                        count, CacheBlockInfo::block_type_t::PAGE_TABLE, SubsecondTime::Zero(), nullptr,
-                        radix_origin, address);
+                    if(pde_or_pte_level){
+                        for (std::deque<DramTranslationBufferEntry>::iterator it = dram_translation_buffer.begin();
+                             it != dram_translation_buffer.end(); ++it){
+                            if(it->cache_line == cache_address
+                               && it->level == level
+                               && it->t_done <= t_need){
+                                served_from_dram_buffer = true;
+                                hit_where = (it->hit_where == HitWhere::UNKNOWN) ? HitWhere::DRAM : it->hit_where;
+                                dram_translation_buffer.erase(it);
+                                break;
+                            }
+                        }
+                    }
 
-                        // std::cout << "PTW Level " << level << " Access Address: 0x" << std::hex << cache_address 
-                        //           << " HitWhere: " << HitWhereString(hit_where) << std::dec << std::endl;
+                    if(!served_from_dram_buffer){
+                        if(count && overlap_prefetch_state.valid
+                            && level == stats_radix.number_of_levels
+                            && cache_address == overlap_prefetch_state.leaf_cache_line){
 
-                    SubsecondTime t_end = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
-                    
-                    if(page_walk_cache_enabled && allow_psc_lookup)
-                        total_latency = t_end - t_start + pwc->miss_latency.getLatency();
-                    else
-                        total_latency = t_end - t_start;
-                    
+                            SubsecondTime t_issue = overlap_prefetch_state.t_issue;
+                            SubsecondTime t_done  = overlap_prefetch_state.t_done;
+
+                            // total prefetch duration
+                            UInt64 pte_cycles = (t_done > t_issue)
+                                ? SubsecondTime::divideRounded(t_done - t_issue, core->getDvfsDomain()->getPeriod())
+                                : 0;
+                            if(pte_cycles > 0){
+                                SubsecondTime t_overlap_end = (t_need < t_done) ? t_need : t_done;
+                                UInt64 overlap_cycles = (t_overlap_end > t_issue)
+                                    ? SubsecondTime::divideRounded(t_overlap_end - t_issue, core->getDvfsDomain()->getPeriod())
+                                    : 0;
+                                UInt64 tail_cycles = (t_done > t_need)
+                                    ? SubsecondTime::divideRounded(t_done - t_need, core->getDvfsDomain()->getPeriod())
+                                    : 0;
+                                UInt64 ratio_milli = static_cast<UInt64>((overlap_cycles * 1000ULL) / pte_cycles);
+                                overlap_ratio_histogram.update(ratio_milli);
+                                overlap_tail_latency_histogram.update(tail_cycles);
+
+                                overlap_ratio_sum_milli += ratio_milli;
+                                overlap_samples++;
+                                if (t_done <= t_need)
+                                    overlap_ready++;
+                            }
+                            overlap_prefetch_state.valid = false;
+                        }
+
+                        hit_where = cache->processMemOpFromCore(
+                            eip,
+                            lock_signal,
+                            Core::mem_op_t::READ,
+                            cache_address, 0,
+                            data_buf, data_length,
+                            modeled,
+                            count, CacheBlockInfo::block_type_t::PAGE_TABLE, SubsecondTime::Zero(), nullptr,
+                            radix_origin, address);
+
+                        SubsecondTime t_end = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
+                        if(page_walk_cache_enabled && allow_psc_lookup)
+                            total_latency = t_end - t_start + pwc->miss_latency.getLatency();
+                        else
+                            total_latency = t_end - t_start;
+                    } else {
+                        total_latency = page_walk_cache_enabled && allow_psc_lookup
+                            ? pwc->miss_latency.getLatency()
+                            : SubsecondTime::Zero();
+                    }
+
                     addresses.push_back((IntPtr)(&new_table->entries[a1]));
 
+                    level_hit_where = hit_where;
                     mem_manager->tagCachesBlockType(cache_address,CacheBlockInfo::block_type_t::PAGE_TABLE);
                     recordLevelStats(level-1, total_latency, &hit_where);
-                    if(level_index == stats_radix.number_of_levels - 2)
-                        pd_hit_where = hit_where;
+                    if(level_index == stats_radix.number_of_levels - 2
+                        && (hit_where == HitWhere::DRAM
+                            || hit_where == HitWhere::DRAM_LOCAL
+                            || hit_where == HitWhere::DRAM_REMOTE
+                            || hit_where == HitWhere::DRAM_CACHE))
+                        pde_dram_requests++;
+                    if(level_index == stats_radix.number_of_levels - 1
+                        && (hit_where == HitWhere::DRAM
+                            || hit_where == HitWhere::DRAM_LOCAL
+                            || hit_where == HitWhere::DRAM_REMOTE
+                            || hit_where == HitWhere::DRAM_CACHE))
+                        pte_dram_requests++;
                     if(page_walk_cache_enabled && count){
                         recordPscMiss(level_index, total_latency, hit_where);
                     }
@@ -642,85 +720,9 @@ namespace ParametricDramDirectoryMSI{
                 return total_latency;
             }
             
-            bool pd_level = (level_index == stats_radix.number_of_levels - 2);
-            bool pd_psc_miss = early_fetch_enabled && pd_level && !pwc_hit;
-
-            // Prefetch the leaf PTE after a PD-level PSC miss (hit or page-fault path).
-            if (pd_psc_miss
-                && new_table->entries[a1].entry_type == ptw_table_entry_type::PTW_TABLE_POINTER
-                && new_table->entries[a1].next_level_table)
-            {
-                CacheCntlr* prefetch_cache = cache;
-                if(mem_manager){
-                    switch (pd_hit_where){
-                        // case HitWhere::L1_OWN:
-                        //     prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::L1_DCACHE);
-                        //     break;
-                        case HitWhere::L2_OWN:
-                            prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::L2_CACHE);
-                            break;
-                        // case HitWhere::L3_OWN:
-                        //     prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::L3_CACHE);
-                        //     break;
-                        // case HitWhere::L4_OWN:
-                        //     prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::L4_CACHE);
-                        //     break;
-                        case HitWhere::NUCA_CACHE:
-                        case HitWhere::CACHE_REMOTE:
-                        case HitWhere::DRAM:
-                        case HitWhere::DRAM_LOCAL:
-                        case HitWhere::DRAM_REMOTE:
-                        case HitWhere::DRAM_CACHE:
-                            prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::LAST_LEVEL_CACHE);
-                            break;
-                        case HitWhere::MISS:
-                        case HitWhere::SIBLING:
-                        case HitWhere::L1_SIBLING:
-                        case HitWhere::L2_SIBLING:
-                        case HitWhere::L3_SIBLING:
-                        case HitWhere::L4_SIBLING:
-                        default:
-                            prefetch_cache = cache;
-                            break;
-                    }
-                }
-                
-                if(!prefetch_cache)
-                {
-                    return total_latency+InitializeWalkRecursive(eip,address,level+1,new_table->entries[a1].next_level_table,lock_signal,data_buf,data_length,modeled,count, traversal_path, allow_psc_lookup && !pd_psc_miss, psc_state, ptb_hit);
-                }
-
-                std::vector<uint64_t> vpn_indices = computeVpnIndices(address);
-                uint64_t leaf_index = vpn_indices.back();
-                ptw_table* leaf_table = new_table->entries[a1].next_level_table;
-                IntPtr leaf_address = ((IntPtr)(&leaf_table->entries[leaf_index])) & (~((64 - 1)));
-                SubsecondTime prefetch_time = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
-                bool pushed = prefetch_cache->enqueuePrefetch(leaf_address, prefetch_time);
-                if(pushed)
-                {   
-                    prefetch_cache->Prefetch(eip, prefetch_time);
-                    EarlyFetchMetadata early_fetch_metadata = prefetch_cache->get_prefetch_metadata(leaf_address);
-                    pwc->lookup(leaf_address, prefetch_time, true, level + 1, false);
-
-                    SubsecondTime prefetch_issue = early_fetch_metadata.m_last_prefetch_issue;
-                    SubsecondTime prefetch_done = early_fetch_metadata.m_last_prefetch_done;
-                    uint64_t delta = (prefetch_done > prefetch_issue)
-                        ? SubsecondTime::divideRounded(prefetch_done - prefetch_issue, core->getDvfsDomain()->getPeriod())
-                        : 0;
-                    prefeth_latency[early_fetch_metadata.hit_where].update(delta);
-                    if(count){
-                        overlap_prefetch_state.valid = true;
-                        overlap_prefetch_state.leaf_cache_line = leaf_address;
-                        overlap_prefetch_state.t_issue = prefetch_issue;
-                        overlap_prefetch_state.t_done = prefetch_done;
-                    }
-                }
-                m_shmem_perf_model->setElapsedTime(ShmemPerfModel::_USER_THREAD, prefetch_time);
-            }
-
-            return total_latency+InitializeWalkRecursive(eip,address,level+1,new_table->entries[a1].next_level_table,lock_signal,data_buf,data_length,modeled,count, traversal_path, allow_psc_lookup && !pd_psc_miss, psc_state, ptb_hit);
-        
+            return total_latency+InitializeWalkRecursive(eip,address,level+1,new_table->entries[a1].next_level_table,lock_signal,data_buf,data_length,modeled,count, traversal_path, allow_psc_lookup, psc_state, ptb_hit);
     }
+
     void PageTableWalkerRadix::recordPscMiss(int level_index, SubsecondTime latency, HitWhere::where_t hit_where){
         UInt64 cycles = SubsecondTime::divideRounded(latency, core->getDvfsDomain()->getPeriod());
         psc_misses++;

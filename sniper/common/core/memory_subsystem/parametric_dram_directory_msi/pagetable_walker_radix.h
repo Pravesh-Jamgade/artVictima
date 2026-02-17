@@ -17,6 +17,7 @@
 #include <array>
 #include <string>
 #include <map>
+#include <deque>
 
 
 namespace ParametricDramDirectoryMSI{
@@ -88,10 +89,11 @@ namespace ParametricDramDirectoryMSI{
             UInt64 overlap_ready;
             UInt64 overlap_ratio_sum_milli;
             UInt64 pd_prefetch_overlap_samples;
-            bool early_fetch_enabled;
             UInt64 rob_stall_stlb_miss_cycles;
             UInt64 psc_accesses;
             UInt64 psc_misses;
+            UInt64 pde_dram_requests;
+            UInt64 pte_dram_requests;
             std::array<std::array<UInt64, 2>, 2> ptb_pdpt_combo_counts;
             std::map<std::string, UInt64> traversal_path_counts;
             UInt64 traversal_paths_unique_count;
@@ -108,6 +110,14 @@ namespace ParametricDramDirectoryMSI{
                 SubsecondTime t_done;
             };
             OverlapPrefetchState overlap_prefetch_state;
+            struct DramTranslationBufferEntry{
+                IntPtr cache_line;
+                int level;
+                SubsecondTime t_issue;
+                SubsecondTime t_done;
+                HitWhere::where_t hit_where;
+            };
+            std::deque<DramTranslationBufferEntry> dram_translation_buffer;
             SubsecondTime init_walk(IntPtr eip, IntPtr address, UtopiaCache* shadow_cache, CacheCntlr *_cache,Core::lock_signal_t lock_signal,Byte* data_buf, UInt32 data_length,bool modeled, bool count) ;
             SubsecondTime InitializeWalkRecursive(IntPtr eip, IntPtr address,int level,ptw_table* new_table,Core::lock_signal_t lock_signal,Byte* data_buf, UInt32 data_length,bool modeled, bool count, std::string &traversal_path, bool allow_psc_lookup, PscCombinationState *psc_state, bool ptb_hit);
             int init_walk_functional(IntPtr address);
