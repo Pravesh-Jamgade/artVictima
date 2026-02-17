@@ -1445,6 +1445,8 @@
       void
       MemoryManager::sendMsg(PrL1PrL2DramDirectoryMSI::ShmemMsg::msg_t msg_type, MemComponent::component_t sender_mem_component, MemComponent::component_t receiver_mem_component, core_id_t requester, core_id_t receiver, IntPtr address, Byte* data_buf, UInt32 data_length, HitWhere::where_t where, ShmemPerf *perf, ShmemPerfModel::Thread_t thread_num, CacheBlockInfo::block_type_t block_type)
       {
+         std::cout <<  "Sending message of type " << std::dec << msg_type << " from sender " << String(MemComponentString(sender_mem_component)) << " to receiver " << std::dec << String(MemComponentString(receiver_mem_component)) << ", address 0x" << std::hex << address
+                                      << " at time " << std::dec << getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD).getNS() << " ns\n";
          //std::cout<<"Address: "<<address<<"\n";
       MYLOG("send msg %u %ul%u > %ul%u", msg_type, requester, sender_mem_component, receiver, receiver_mem_component);
          assert((data_buf == NULL) == (data_length == 0));

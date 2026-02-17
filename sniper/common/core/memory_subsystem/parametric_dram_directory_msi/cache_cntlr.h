@@ -462,6 +462,29 @@ namespace ParametricDramDirectoryMSI
          void enable() { m_master->m_cache->enable(); }
          void disable() { m_master->m_cache->disable(); }
 
+         // void CacheCntlr::initiateDirectoryAccessNoWait(Core::mem_op_t mem_op_type,
+         //                                       IntPtr address,
+         //                                       CacheBlockInfo::block_type_t block_type,
+         //                                       Core::mem_origin_t mem_origin)
+         //       {
+         //       // Don’t enqueue CacheDirectoryWaiter at all.
+
+         //       // Use a dedicated msg type or treat it as a prefetch-like request.
+         //       // Use a dummy ShmemPerf pointer so no core gets time-adjusted later.
+         //       m_dummy_shmem_perf.reset(SubsecondTime::Zero(), INVALID_CORE_ID);
+
+         //       getMemoryManager()->sendMsg(
+         //             PrL1PrL2DramDirectoryMSI::ShmemMsg::SH_REQ,  // new msg
+         //             MemComponent::LAST_LEVEL_CACHE, MemComponent::TAG_DIR,
+         //             m_core_id_master, getHome(address), address,
+         //             NULL, 0, HitWhere::UNKNOWN,
+         //             &m_dummy_shmem_perf,
+         //             ShmemPerfModel::_SIM_THREAD,
+         //             block_type
+         //       );
+         //       }
+
+
          friend class CacheCntlrList;
          friend class MemoryManager;
    };
