@@ -18,7 +18,7 @@ void DramCntlrInterface::handleMsgFromTagDirectory(core_id_t sender, PrL1PrL2Dra
          Byte data_buf[getCacheBlockSize()];
          SubsecondTime dram_latency;
          HitWhere::where_t hit_where;
-         boost::tie(dram_latency, hit_where) = getDataFromDram(address, shmem_msg->getRequester(), data_buf, msg_time, shmem_msg->getPerf(),shmem_msg->getBlockType());
+         boost::tie(dram_latency, hit_where) = getDataFromDram(address, shmem_msg->getRequester(), data_buf, msg_time, shmem_msg->getPerf(),shmem_msg->getBlockType(), shmem_msg->getBlockType());
 
          getShmemPerfModel()->incrElapsedTime(dram_latency, ShmemPerfModel::_SIM_THREAD);
 
@@ -34,6 +34,28 @@ void DramCntlrInterface::handleMsgFromTagDirectory(core_id_t sender, PrL1PrL2Dra
                address,
                data_buf, getCacheBlockSize(),
                hit_where, shmem_msg->getPerf(), ShmemPerfModel::_SIM_THREAD,block_type);
+         break;
+      }
+
+      case PrL1PrL2DramDirectoryMSI::ShmemMsg::DRAM_SPECIAL_READ_REQ:
+      {
+         // std::cout << "Received DRAM_SPECIAL_READ_REQ for address: " << std::hex << shmem_msg->getAddress() << std::dec << " from sender: " << sender  << " sim: " << msg_time.getNS() << " ns, usr: " << usr_time.getNS() << " ns" << std::endl;
+         IntPtr address = shmem_msg->getAddress();
+         Byte data_buf[getCacheBlockSize()];
+         SubsecondTime dram_latency;
+         HitWhere::where_t hit_where;
+         boost::tie(dram_latency, hit_where) = getDataFromDram(address, shmem_msg->getRequester(), data_buf, msg_time, shmem_msg->getPerf(),shmem_msg->getBlockType(),shmem_msg->getBlockType());
+
+         getShmemPerfModel()->incrElapsedTime(dram_latency, ShmemPerfModel::_SIM_THREAD);
+
+         shmem_msg->getPerf()->updateTime(getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD),
+            hit_where == HitWhere::DRAM_CACHE ? ShmemPerf::DRAM_CACHE : ShmemPerf::DRAM);
+         
+         msg_time = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD);
+         // std::cout << "Done DRAM_SPECIAL_READ_REQ service: " << std::hex << shmem_msg->getAddress() << std::dec << " from sender: " << sender  << " sim: " << msg_time.getNS() << " ns, usr: " << usr_time.getNS() << " ns" << std::endl;
+
+         CacheBlockInfo::block_type_t block_type = shmem_msg->getBlockType();
+
          break;
       }
 

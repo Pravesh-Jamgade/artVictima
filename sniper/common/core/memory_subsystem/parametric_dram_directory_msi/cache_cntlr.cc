@@ -137,6 +137,29 @@ CacheMasterCntlr::~CacheMasterCntlr()
    }
 }
 
+void CacheCntlr::initiateDirectoryAccessNoWait(
+            IntPtr address,
+            CacheBlockInfo::block_type_t block_type
+         )
+{
+      // Don’t enqueue CacheDirectoryWaiter at all.
+
+      // Use a dedicated msg type or treat it as a prefetch-like request.
+      // Use a dummy ShmemPerf pointer so no core gets time-adjusted later.
+      m_dummy_shmem_perf.reset(SubsecondTime::Zero(), INVALID_CORE_ID);
+      // std::cout <<  "Sending message address 0x" << std::hex << address << " sim: " << std::dec << getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD).getNS() << " ns usr: " << std::dec << getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD).getNS() << " ns\n";
+
+      getMemoryManager()->sendMsg(
+            PrL1PrL2DramDirectoryMSI::ShmemMsg::DRAM_SPECIAL_READ_REQ,  // new msg
+            MemComponent::DRAM, MemComponent::DRAM,
+            m_core_id_master, getHome(address), address,
+            NULL, 0, HitWhere::UNKNOWN,
+            &m_dummy_shmem_perf,
+            ShmemPerfModel::_SIM_THREAD,
+            CacheBlockInfo::block_type_t::PREFETCH_PAGE_TABLE
+      );
+}
+
 CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
       String name,
       core_id_t core_id,
@@ -176,6 +199,8 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
 {
    m_core_id_master = m_core_id - m_core_id % m_shared_cores;
    Sim()->getStatsManager()->logTopology(name, core_id, m_core_id_master);
+
+   std::cout << "Creating cache controller for " << name << " with core_id: " << core_id << " and master core id: " << m_core_id_master << std::endl;
 
    LOG_ASSERT_ERROR(!Sim()->getCfg()->hasKey("perf_model/perfect_llc"),
                     "perf_model/perfect_llc is deprecated, use perf_model/lX_cache/perfect instead");
@@ -436,8 +461,7 @@ CacheCntlr::processMemOpFromCore(
          
    }
    #endif
-
-
+ 
    SubsecondTime t_start = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
 
    if (tempo_prefetch_enabled
@@ -1107,6 +1131,7 @@ CacheCntlr::doPrefetch(IntPtr eip, IntPtr prefetch_address, SubsecondTime t_star
 HitWhere::where_t
 CacheCntlr::processShmemReqFromPrevCache(IntPtr eip, CacheCntlr* requester, Core::mem_op_t mem_op_type, IntPtr address, bool modeled, bool count,CacheBlockInfo::block_type_t block_type, Prefetch::prefetch_type_t isPrefetch, SubsecondTime t_issue, bool have_write_lock, Core::mem_origin_t mem_origin)
 {
+   // std::cout << "processShmemReqFromPrevCache: " << getCache()->getName() << ", model, " << modeled << ", count, " << count << " address = " << std::hex << address << std::dec << " sim: " << getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD).getNS() << " ns, usr: " << getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD).getNS() << " ns " << std::endl;
    #ifdef PRIVATE_L2_OPTIMIZATION
    bool have_write_lock_internal = have_write_lock;
    if (! have_write_lock && m_shared_cores > 1)
@@ -1791,7 +1816,7 @@ SharedCacheBlockInfo*
 CacheCntlr::insertCacheBlock(IntPtr address, CacheState::cstate_t cstate, Byte* data_buf, core_id_t requester, ShmemPerfModel::Thread_t thread_num, CacheBlockInfo::block_type_t block_type)
 {
 
-
+   // std::cout << "Inserting " << getCache()->getName() << " address:" << std::hex << address << std::dec << " sim: " << getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD).getNS() << " ns, usr: " << getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD).getNS() << " ns" << std::endl;
  
    MYLOG("insertCacheBlock at %s l%d @ %lx as %c (now %c)", getCache()->getName().c_str(), m_mem_component, address, CStateString(cstate), CStateString(getCacheState(address)));
    //std::cout << "Inserting cache block at cache: " << getCache()->getName() << " with address:" << address << " with type: " << block_type << std::endl;
@@ -2807,4 +2832,5 @@ CacheCntlr::getNetworkThreadSemaphore()
 }
 
 }
+
    

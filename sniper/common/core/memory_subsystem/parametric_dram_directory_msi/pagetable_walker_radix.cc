@@ -534,7 +534,7 @@ namespace ParametricDramDirectoryMSI{
                 {
                     pwc_address = (IntPtr)(&new_table->entries[a1]);
 
-                    std::cout << "Count Address Bits: va, " << std::hex << address << ", pt_addr, " << pwc_address << '\n'; 
+                    // std::cout << "Count Address Bits: va, " << std::hex << address << ", pt_addr, " << pwc_address << '\n'; 
                     pwc_where = pwc->lookup(pwc_address, t_start ,true, level, count);
                     if(count)
                         psc_accesses++;
@@ -600,23 +600,6 @@ namespace ParametricDramDirectoryMSI{
                     // Direct DRAM datapath: soft-lookup cache hierarchy before issuing DRAM queue request.
                     bool pde_level = (level_index == stats_radix.number_of_levels - 2);
                     bool pte_level = (level_index == stats_radix.number_of_levels - 1);
-                    bool dram_hit = (level_hit_where == HitWhere::DRAM
-                        || level_hit_where == HitWhere::DRAM_LOCAL
-                        || level_hit_where == HitWhere::DRAM_REMOTE
-                        || level_hit_where == HitWhere::DRAM_CACHE);
-
-                    if(dram_hit && (pde_level || pte_level)){
-                        DramTranslationBufferEntry dram_entry = {
-                            ((IntPtr)(&new_table->entries[a1])) & (~((64 - 1))),
-                            level,
-                            t_start,
-                            t_start + total_latency,
-                            level_hit_where
-                        };
-                        dram_translation_buffer.push_back(dram_entry);
-                        if(dram_translation_buffer.size() > 128)
-                            dram_translation_buffer.pop_front();
-                    }
 
                     if(pde_level || pte_level)
                     {
@@ -630,69 +613,23 @@ namespace ParametricDramDirectoryMSI{
                             };
                             bool in_l1 = has_line(MemComponent::L1_DCACHE);
                             bool in_l2 = has_line(MemComponent::L2_CACHE);
-                            bool in_llc = has_line(MemComponent::LAST_LEVEL_CACHE);
+                            bool in_llc = has_line(MemComponent::L3_CACHE);
                             found_in_dram = !(in_l1 || in_l2 || in_llc);
                         }
                         
-                        // Expecting that it goes to Directory and then DRAM since data not in cache
+                        // data in dram, we will update this with prediction
                         if(found_in_dram){
 
                             SubsecondTime fake_issue = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
                             // std::cout << "Privilige PTW " << level << " address 0x" << std::hex << cache_address 
                             //           << " at time " << std::dec << getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD).getNS() << " ns\n";
                             
-                            if(mem_manager)
-                            {
-                                cache->processMemOpFromCore(
-                                    eip,
-                                    lock_signal,
-                                    Core::mem_op_t::READ,
-                                    cache_address, 0,
-                                    data_buf, data_length,
-                                    false,
-                                    false, CacheBlockInfo::block_type_t::PAGE_TABLE, SubsecondTime::Zero(), shadow_cache,
-                                    Core::mem_origin_t::PML4_ACCESS, address);
-                            }
-                            
-                            auto invalidate_line = [&](MemComponent::component_t component) {
-                                CacheCntlr *cntlr = mem_manager->getCacheCntlrAt(core->getId(), component);
-                                if(cntlr && cntlr->getCache()){
-                                    return cntlr->getCache()->invalidateSingleLine(cache_address);
-                                }
-                                return false;
-                            };
-                            bool invalidate_in_l1 = invalidate_line(MemComponent::L1_DCACHE);
-                            bool invalidate_in_l2 = invalidate_line(MemComponent::L2_CACHE);
-                            bool invalidate_in_llc = invalidate_line(MemComponent::LAST_LEVEL_CACHE);
-
-                            std::cout << "Invalidated line for PTW level " << level << " address 0x" << std::hex << cache_address 
-                                      << " in L1: " << invalidate_in_l1
-                                      << ", L2: " << invalidate_in_l2
-                                      << ", LLC: " << invalidate_in_llc
-                                      << std::dec << std::endl;
+                            CacheCntlr* llc_cntrl = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::L3_CACHE);
+                            llc_cntrl->initiateDirectoryAccessNoWait(cache_address, CacheBlockInfo::block_type_t::PREFETCH_PAGE_TABLE);
 
                             m_shmem_perf_model->setElapsedTime(ShmemPerfModel::_USER_THREAD, fake_issue);
                             // std::cout << "BeforeReset PTW " << level << " address 0x" << std::hex << cache_address 
                             //           << " at time " << std::dec << getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD).getNS() << " ns\n";
-                            
-
-                            // SubsecondTime dram_issue = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
-                            // bool pushed = dram_queue_cache->enqueuePrefetch(leaf_address, dram_issue);
-                            // if(pushed){
-                            //     dram_queue_cache->Prefetch(eip, dram_issue);
-                            //     EarlyFetchMetadata metadata = dram_queue_cache->get_prefetch_metadata(leaf_address);
-                            //     DramTranslationBufferEntry pte_entry = {
-                            //         leaf_address,
-                            //         level + 1,
-                            //         metadata.m_last_prefetch_issue,
-                            //         metadata.m_last_prefetch_done,
-                            //         metadata.hit_where
-                            //     };
-                            //     dram_translation_buffer.push_back(pte_entry);
-                            //     if(dram_translation_buffer.size() > 128)
-                            //         dram_translation_buffer.pop_front();
-                            // }
-                            // m_shmem_perf_model->setElapsedTime(ShmemPerfModel::_USER_THREAD, dram_issue);
                         }
                     }
 
