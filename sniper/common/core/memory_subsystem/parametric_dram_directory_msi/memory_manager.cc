@@ -740,11 +740,15 @@
 
          // Create Performance Modes
          for(UInt32 i = MemComponent::FIRST_LEVEL_CACHE; i <= (UInt32)m_last_level_cache; ++i)
-            m_cache_perf_models[(MemComponent::component_t)i] = CachePerfModel::create(
+         {
+             m_cache_perf_models[(MemComponent::component_t)i] = CachePerfModel::create(
             cache_parameters[(MemComponent::component_t)i].perf_model_type,
             cache_parameters[(MemComponent::component_t)i].data_access_time,
             cache_parameters[(MemComponent::component_t)i].tags_access_time
             );
+
+            std::cout << "Cache level " << String(MemComponentString((MemComponent::component_t)i)) << " tag access time: " << cache_parameters[(MemComponent::component_t)i].tags_access_time << std::endl;
+         }
 
 
          if (m_dram_cntlr_present)
@@ -1460,14 +1464,13 @@
          assert((data_buf == NULL) == (data_length == 0));
          PrL1PrL2DramDirectoryMSI::ShmemMsg shmem_msg(msg_type, sender_mem_component, receiver_mem_component, requester, address, data_buf, data_length, perf, block_type);
          shmem_msg.setWhere(where);
-
-         Byte* msg_buf = shmem_msg.makeMsgBuf();
          SubsecondTime msg_time = getShmemPerfModel()->getElapsedTime(thread_num);
          perf->updateTime(msg_time);
+         Byte* msg_buf = shmem_msg.makeMsgBuf();
 
          if (m_enabled)
          {
-            LOG_PRINT("Sending Msg: type(%u), address(0x%x), sender_mem_component(%u), receiver_mem_component(%u), requester(%i), sender(%i), receiver(%i)", msg_type, address, sender_mem_component, receiver_mem_component, requester, getCore()->getId(), receiver);
+            LOG_PRINT("Sending Msg: type(%u), address(0x%x), sender_mem_component(%s), receiver_mem_component(%s), requester(%i), sender(%i), receiver(%i)", msg_type, address, from_str.c_str(), to_str.c_str(), requester, getCore()->getId(), receiver);
          }
 
          NetPacket packet(msg_time, SHARED_MEM_1,

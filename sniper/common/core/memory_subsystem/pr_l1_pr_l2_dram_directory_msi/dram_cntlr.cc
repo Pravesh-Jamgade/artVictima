@@ -58,15 +58,14 @@ DramCntlr::getDataFromDram(IntPtr address, core_id_t requester, Byte* data_buf,
 {
     // When a demand arrives, it hits if DRAM has already completed the earlier fetch
     auto it = m_dram_addresses.find(address);
-    if (it != m_dram_addresses.end() && blocktype == CacheBlockInfo::PAGE_TABLE)
+    if (it != m_dram_addresses.end())
     {
         SubsecondTime ready_time = it->second.first;
         SubsecondTime issued_at = it->second.second;
 
-        std::cout << "Address 0x" << std::hex << address << std::dec
-                  << "type, " << ((blocktype != CacheBlockInfo::NON_PAGE_TABLE) ? "NON_PT" : "OTHER")
-                  << " demand " << now.getNS() << " ns, ready at "
-                  << ready_time.getNS() << " ns, issued at " << issued_at.getNS() << " ns\n";
+      //   std::cout << "Address 0x" << std::hex << address << std::dec
+      //             << " demand " << now.getNS() << " ns, ready at "
+      //             << ready_time.getNS() << " ns, issued at " << issued_at.getNS() << " ns\n";
 
          ++m_reads;
          m_dram_addresses.erase(it);
@@ -84,9 +83,22 @@ DramCntlr::getDataFromDram(IntPtr address, core_id_t requester, Byte* data_buf,
 
     if(blocktype == CacheBlockInfo::PREFETCH_PAGE_TABLE)
     {
-      std::cout << "Track type, " << ((blocktype == CacheBlockInfo::PREFETCH_PAGE_TABLE) ? "PREFETCH_PAGE_TABLE" : "OTHER") << ", address, " <<std::hex<< address <<std::dec<< '\n';
+      // std::cout << "Track type, " << ((blocktype == CacheBlockInfo::PREFETCH_PAGE_TABLE) ? "PREFETCH_PAGE_TABLE" : "OTHER") << ", address, " <<std::hex<< address <<std::dec<< '\n';
       // Store completion time in DRAM's timeline: ready_time, issue_time
       m_dram_addresses[address] = {now + dram_access_latency, now};
+
+      IntPtr ptw_consumer = getPTWChainEntry(address);
+      if (ptw_consumer){
+         // std::cout << "Producer 0x" << std::hex << address << std::dec << " issue " << now.getNS() << " ns, ready at " << (now + dram_access_latency).getNS() << " ns\n";
+         removePTWChainEntry(address);
+         SubsecondTime newIssue = now + dram_access_latency;
+         auto result = getDataFromDram(ptw_consumer, requester, data_buf, newIssue, perf, is_metadata, blocktype);
+         
+         // std::cout << "Consumer 0x" << std::hex << ptw_consumer << std::dec << " issue " << newIssue.getNS() << " ns, ready at " << (newIssue + result.get<0>()).getNS() << " ns\n";
+         m_dram_addresses[ptw_consumer] = {newIssue + result.get<0>(), now};
+
+         dram_access_latency += result.get<0>();
+      }
     }
     
 

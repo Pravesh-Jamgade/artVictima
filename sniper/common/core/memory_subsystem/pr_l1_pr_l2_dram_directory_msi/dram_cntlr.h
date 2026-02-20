@@ -37,6 +37,7 @@ namespace PrL1PrL2DramDirectoryMSI
          void printDramAccessCount(void);
 
          std::map<IntPtr, std::pair<SubsecondTime, SubsecondTime>> m_dram_addresses;
+         std::map<IntPtr, IntPtr> m_ptw_chain;
 
       public:
          DramCntlr(MemoryManagerBase* memory_manager,
@@ -44,6 +45,10 @@ namespace PrL1PrL2DramDirectoryMSI
                UInt32 cache_block_size,AddressHomeLookup* address_home_lookup);
 
          ~DramCntlr();
+         
+         void setPTWChainEntry(IntPtr producer, IntPtr consumer) { m_ptw_chain[producer] = consumer; }
+         IntPtr getPTWChainEntry(IntPtr producer) { return m_ptw_chain[producer]; } 
+         void removePTWChainEntry(IntPtr producer) { m_ptw_chain.erase(producer); }  
 
          DramPerfModel* getDramPerfModel() { return m_dram_perf_model; }
 
