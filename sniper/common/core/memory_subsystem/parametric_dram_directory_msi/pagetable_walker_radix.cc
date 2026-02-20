@@ -226,6 +226,7 @@ namespace ParametricDramDirectoryMSI{
         total_walk_latency = SubsecondTime::Zero();
         total_ptb_latency = SubsecondTime::Zero();
         early_fetch_enabled = Sim()->getCfg()->getBoolDefault("perf_model/ptb/early_fetch", false);
+        m_special_datapath_enabled = Sim()->getCfg()->getBoolDefault("perf_model/ptw/special_datapath", false);
         overlap_samples = 0;
         overlap_ready = 0;
         overlap_ratio_sum_milli = 0;
@@ -600,7 +601,7 @@ namespace ParametricDramDirectoryMSI{
                     // Direct DRAM datapath: soft-lookup cache hierarchy before issuing DRAM queue request.
                     bool pde_level = (level_index == stats_radix.number_of_levels - 2);
 
-                    if(pde_level && false)
+                    if(pde_level && m_special_datapath_enabled)
                     {
                         bool found_in_dram = false;
                        
@@ -624,10 +625,10 @@ namespace ParametricDramDirectoryMSI{
                             ptw_table* leaf_table = new_table->entries[a1].next_level_table;
                             IntPtr leaf_address = ((IntPtr)(&leaf_table->entries[vpn_indices.back()])) & (~((64 - 1)));
 
-                            bool in_l1 = has_line(MemComponent::L1_DCACHE, leaf_address);
-                            bool in_l2 = has_line(MemComponent::L2_CACHE, leaf_address);
-                            bool in_llc = has_line(MemComponent::L3_CACHE, leaf_address);
-                            found_in_dram = !(in_l1 || in_l2 || in_llc);
+                            // bool in_l1 = has_line(MemComponent::L1_DCACHE, leaf_address);
+                            // bool in_l2 = has_line(MemComponent::L2_CACHE, leaf_address);
+                            // bool in_llc = has_line(MemComponent::L3_CACHE, leaf_address);
+                            // found_in_dram = !(in_l1 || in_l2 || in_llc);
 
                             // data in dram, we will update this with prediction
                             if(found_in_dram)
