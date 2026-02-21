@@ -28,6 +28,10 @@ namespace PrL1PrL2DramDirectoryMSI
          typedef std::unordered_map<IntPtr,UInt64> AccessCountMap;
          AccessCountMap* m_dram_access_count;
          UInt64 m_reads, m_writes;
+         UInt64 m_overlap_count;
+         UInt64 m_overlap_latency_cycles;
+         UInt64 m_ready_before_demand_count;
+         UInt64 m_special_requests;
 
          ShmemPerf m_dummy_shmem_perf;
 
@@ -47,7 +51,11 @@ namespace PrL1PrL2DramDirectoryMSI
          ~DramCntlr();
          
          void setPTWChainEntry(IntPtr producer, IntPtr consumer) { m_ptw_chain[producer] = consumer; }
-         IntPtr getPTWChainEntry(IntPtr producer) { return m_ptw_chain[producer]; } 
+         IntPtr getPTWChainEntry(IntPtr producer)
+         {
+            std::map<IntPtr, IntPtr>::const_iterator it = m_ptw_chain.find(producer);
+            return (it == m_ptw_chain.end()) ? 0 : it->second;
+         }
          void removePTWChainEntry(IntPtr producer) { m_ptw_chain.erase(producer); }  
 
          DramPerfModel* getDramPerfModel() { return m_dram_perf_model; }

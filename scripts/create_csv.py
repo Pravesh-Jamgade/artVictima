@@ -84,6 +84,12 @@ stats = {
     "nuca-cache.writes": None,
     "dram.reads": None,
     "dram.writes": None,
+    "dram.overlap_count": None,
+    "dram.overlap_latency_cycles": None,
+    "dram.ready_before_demand_count": None,
+    "dram.special_requests": None,
+    "dram.ready_before_demand_pct": None,
+    "dram.avg_overlap_cycles": None,
     "barrier.global_time": None,
     "dram-queue.total-time-used": None,
     "ddr.page-closing": None,
@@ -257,5 +263,15 @@ with open('results.csv', 'w') as csvfile:
 
                     if key in stats:
                         row[key] = float(value)
+
+            overlap_count = row.get("dram.overlap_count")
+            overlap_latency_cycles = row.get("dram.overlap_latency_cycles")
+            ready_before_demand = row.get("dram.ready_before_demand_count")
+            special_requests = row.get("dram.special_requests")
+            if special_requests and special_requests > 0 and ready_before_demand is not None:
+                row["dram.ready_before_demand_pct"] = (ready_before_demand / special_requests) * 100.0
+
+            if overlap_count and overlap_count > 0 and overlap_latency_cycles is not None:
+                row["dram.avg_overlap_cycles"] = overlap_latency_cycles / overlap_count
 
             writer.writerow(row)
