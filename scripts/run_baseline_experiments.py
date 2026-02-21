@@ -81,6 +81,32 @@ EXPERIMENT_CONFIGS = {
         "config": "/app/sniper/config/virtual_memory_configs/tempo.cfg",
         "label": "tempo",
     },
+
+    "vikram_special": {
+        "config": "/app/sniper/config/virtual_memory_configs/vikram_special.cfg",
+        "label": "vikram_special",
+    },
+
+    "vikram_both_special": {
+        "config": "/app/sniper/config/virtual_memory_configs/vikram_both_special.cfg",
+        "label": "vikram_both_special",
+    },
+
+    "vikram_ptb_64": {
+        "config": "/app/sniper/config/virtual_memory_configs/vikram_ptb_64.cfg",
+        "label": "vikram_ptb_64",
+    },
+
+    "vikram_ptb_128": {
+        "config": "/app/sniper/config/virtual_memory_configs/vikram_ptb_128.cfg",
+        "label": "vikram_ptb_128",
+    },
+
+    "vikram_ptb_256": {
+        "config": "/app/sniper/config/virtual_memory_configs/vikram_ptb_256.cfg",
+        "label": "vikram_ptb_256",
+    },
+
     ##################################################
 
     "virt_baseline": {
@@ -363,6 +389,13 @@ def csv_choices(value_string):
 
         "tempo",
         "virt_tempo",
+
+        "vikram_special",
+        "vikram_both_special",
+
+        "vikram_ptb_64",
+        "vikram_ptb_128",
+        "vikram_ptb_256",
         
     ]
 
