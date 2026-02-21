@@ -226,6 +226,7 @@ namespace ParametricDramDirectoryMSI{
         total_walk_latency = SubsecondTime::Zero();
         total_ptb_latency = SubsecondTime::Zero();
         early_fetch_enabled = Sim()->getCfg()->getBoolDefault("perf_model/ptb/early_fetch", false);
+        m_special_datapath_enabled = Sim()->getCfg()->getBoolDefault("perf_model/ptw/special_datapath", false);
         overlap_samples = 0;
         overlap_ready = 0;
         overlap_ratio_sum_milli = 0;
@@ -534,7 +535,7 @@ namespace ParametricDramDirectoryMSI{
                 {
                     pwc_address = (IntPtr)(&new_table->entries[a1]);
 
-                    std::cout << "Count Address Bits: va, " << std::hex << address << ", pt_addr, " << pwc_address << '\n'; 
+                    // std::cout << "Count Address Bits: va, " << std::hex << address << ", pt_addr, " << pwc_address << '\n'; 
                     pwc_where = pwc->lookup(pwc_address, t_start ,true, level, count);
                     if(count)
                         psc_accesses++;
@@ -597,6 +598,59 @@ namespace ParametricDramDirectoryMSI{
                         overlap_prefetch_state.valid = false;
                     }
 
+                    // Direct DRAM datapath: soft-lookup cache hierarchy before issuing DRAM queue request.
+                    bool pde_level = (level_index == stats_radix.number_of_levels - 2);
+
+                    if(pde_level && m_special_datapath_enabled)
+                    {
+                        bool found_in_dram = false;
+                       
+                        auto has_line = [&](MemComponent::component_t component, IntPtr addr) {
+                            CacheCntlr *cntlr = mem_manager->getCacheCntlrAt(core->getId(), component);
+                            return cntlr && cntlr->getCache() && cntlr->getCache()->peekSingleLine(addr);
+                        };
+                        bool in_l1 = has_line(MemComponent::L1_DCACHE, cache_address);
+                        bool in_l2 = has_line(MemComponent::L2_CACHE, cache_address);
+                        bool in_llc = has_line(MemComponent::L3_CACHE, cache_address);
+                        found_in_dram = !(in_l1 || in_l2 || in_llc);
+                        
+                          // We need for early-fetching PTE address
+                        if(new_table->entries[a1].entry_type==ptw_table_entry_type::PTW_NONE){
+                            new_table->entries[a1]=*CreateNewPtwEntryAtLevel(level,stats_radix.number_of_levels,stats_radix.address_bit_indices,stats_radix.hit_percentages,this, address);
+                        }
+
+                        if(new_table->entries[a1].entry_type == ptw_table_entry_type::PTW_TABLE_POINTER && new_table->entries[a1].next_level_table != nullptr)
+                        {
+                            std::vector<uint64_t> vpn_indices = computeVpnIndices(address);
+                            ptw_table* leaf_table = new_table->entries[a1].next_level_table;
+                            IntPtr leaf_address = ((IntPtr)(&leaf_table->entries[vpn_indices.back()])) & (~((64 - 1)));
+
+                            // bool in_l1 = has_line(MemComponent::L1_DCACHE, leaf_address);
+                            // bool in_l2 = has_line(MemComponent::L2_CACHE, leaf_address);
+                            // bool in_llc = has_line(MemComponent::L3_CACHE, leaf_address);
+                            // found_in_dram = !(in_l1 || in_l2 || in_llc);
+
+                            // data in dram, we will update this with prediction
+                            if(found_in_dram)
+                            {
+                                // std::cout << "Special Access Address: 0x" << std::hex << cache_address << ", 0x" << leaf_address << std::dec << " not found in cache, issuing early DRAM request\n";
+                                mem_manager->getDramCntlr()->setPTWChainEntry(cache_address, leaf_address);
+
+                                SubsecondTime fake_issue = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
+                                // std::cout << "Privilige PTW " << level << " address 0x" << std::hex << cache_address 
+                                //           << " at time " << std::dec << getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD).getNS() << " ns\n";
+                                
+                                CacheCntlr* llc_cntrl = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::L3_CACHE);
+                                llc_cntrl->initiateDirectoryAccessNoWait(cache_address, CacheBlockInfo::block_type_t::PREFETCH_PAGE_TABLE);
+
+                                m_shmem_perf_model->setElapsedTime(ShmemPerfModel::_USER_THREAD, fake_issue);
+                                // std::cout << "BeforeReset PTW " << level << " address 0x" << std::hex << cache_address 
+                                //           << " at time " << std::dec << getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD).getNS() << " ns\n";
+                            }
+                        }
+                    }
+
+                    // std::cout << "PTW Level " << level << " Access Address: 0x" << std::hex << cache_address  << std::dec << " at " << getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD).getNS() << " ns\n";
                     Core::mem_origin_t radix_origin = static_cast<Core::mem_origin_t>(level);
 
                     // send PD requets if it is in DRAM
@@ -673,33 +727,28 @@ namespace ParametricDramDirectoryMSI{
                     addresses.push_back((IntPtr)(&new_table->entries[a1]));
 
                     level_hit_where = hit_where;
+
                     mem_manager->tagCachesBlockType(cache_address,CacheBlockInfo::block_type_t::PAGE_TABLE);
+
                     recordLevelStats(level-1, total_latency, &hit_where);
+
                     if(level_index == stats_radix.number_of_levels - 2)
                         pd_hit_where = hit_where;
-                    if(level_index == stats_radix.number_of_levels - 2
-                        && (hit_where == HitWhere::DRAM
-                            || hit_where == HitWhere::DRAM_LOCAL
-                            || hit_where == HitWhere::DRAM_REMOTE
-                            || hit_where == HitWhere::DRAM_CACHE))
-                        pde_dram_requests++;
-                    if(level_index == stats_radix.number_of_levels - 1
-                        && (hit_where == HitWhere::DRAM
-                            || hit_where == HitWhere::DRAM_LOCAL
-                            || hit_where == HitWhere::DRAM_REMOTE
-                            || hit_where == HitWhere::DRAM_CACHE))
-                        pte_dram_requests++;
+                  
                     if(page_walk_cache_enabled && count){
                         recordPscMiss(level_index, total_latency, hit_where);
                     }
+
                     if(page_walk_cache_enabled)
                         updatePscCombinationState(psc_state, level_index, false, hit_where, true);
+
                     if(count){
                         if(page_walk_cache_enabled && allow_psc_lookup)
                             traversal_path += "->PSC-L" + std::to_string(level_index + 1) + "-MISS-" + HitWhereString(hit_where);
                         else
                             traversal_path += "->PSC-L" + std::to_string(level_index + 1) + "-DISABLED";
                     }
+
                     if(count && page_walk_cache_enabled && allow_psc_lookup && level_index == 1)
                         recordPtbPdptCombo(ptb_hit, false);
 
@@ -781,7 +830,6 @@ namespace ParametricDramDirectoryMSI{
                 }
                 m_shmem_perf_model->setElapsedTime(ShmemPerfModel::_USER_THREAD, prefetch_time);
             }
-
             return total_latency+InitializeWalkRecursive(eip,address,level+1,new_table->entries[a1].next_level_table,lock_signal,data_buf,data_length,modeled,count, traversal_path, allow_psc_lookup && !pd_psc_miss, psc_state, ptb_hit);
         
     }

@@ -52,35 +52,62 @@ DramCntlr::~DramCntlr()
 }
 
 boost::tuple<SubsecondTime, HitWhere::where_t>
-DramCntlr::getDataFromDram(IntPtr address, core_id_t requester, Byte* data_buf, SubsecondTime now, ShmemPerf *perf,bool is_metadata)
+DramCntlr::getDataFromDram(IntPtr address, core_id_t requester, Byte* data_buf,
+                           SubsecondTime now, ShmemPerf *perf,
+                           bool is_metadata, int blocktype)
 {
-   if (Sim()->getFaultinjectionManager())
-   {
-      if (m_data_map.count(address) == 0)
-      {
-         m_data_map[address] = new Byte[getCacheBlockSize()];
-         memset((void*) m_data_map[address], 0x00, getCacheBlockSize());
+    // When a demand arrives, it hits if DRAM has already completed the earlier fetch
+    auto it = m_dram_addresses.find(address);
+    if (it != m_dram_addresses.end())
+    {
+        SubsecondTime ready_time = it->second.first;
+        SubsecondTime issued_at = it->second.second;
+
+      //   std::cout << "Address 0x" << std::hex << address << std::dec
+      //             << " demand " << now.getNS() << " ns, ready at "
+      //             << ready_time.getNS() << " ns, issued at " << issued_at.getNS() << " ns\n";
+
+         ++m_reads;
+         m_dram_addresses.erase(it);
+         
+         SubsecondTime latency = (ready_time > now) ? (ready_time - now) : SubsecondTime::Zero();
+
+         return {latency, HitWhere::DRAM};
+        // If you ever want to model “arrived too early”, you can return (ready_time - now)
+        // or let normal DRAM path handle it.
+    }
+
+    SubsecondTime dram_access_latency = runDramPerfModel(requester, now, address, READ, perf, is_metadata);
+
+    ++m_reads;
+
+    if(blocktype == CacheBlockInfo::PREFETCH_PAGE_TABLE)
+    {
+      // std::cout << "Track type, " << ((blocktype == CacheBlockInfo::PREFETCH_PAGE_TABLE) ? "PREFETCH_PAGE_TABLE" : "OTHER") << ", address, " <<std::hex<< address <<std::dec<< '\n';
+      // Store completion time in DRAM's timeline: ready_time, issue_time
+      m_dram_addresses[address] = {now + dram_access_latency, now};
+
+      IntPtr ptw_consumer = getPTWChainEntry(address);
+      if (ptw_consumer){
+         // std::cout << "Producer 0x" << std::hex << address << std::dec << " issue " << now.getNS() << " ns, ready at " << (now + dram_access_latency).getNS() << " ns\n";
+         removePTWChainEntry(address);
+         SubsecondTime newIssue = now + dram_access_latency;
+         auto result = getDataFromDram(ptw_consumer, requester, data_buf, newIssue, perf, is_metadata, blocktype);
+         
+         // std::cout << "Consumer 0x" << std::hex << ptw_consumer << std::dec << " issue " << newIssue.getNS() << " ns, ready at " << (newIssue + result.get<0>()).getNS() << " ns\n";
+         m_dram_addresses[ptw_consumer] = {newIssue + result.get<0>(), now};
+
+         dram_access_latency += result.get<0>();
       }
+    }
+    
 
-      // NOTE: assumes error occurs in memory. If we want to model bus errors, insert the error into data_buf instead
-      if (m_fault_injector)
-         m_fault_injector->preRead(address, address, getCacheBlockSize(), (Byte*)m_data_map[address], now);
-
-      memcpy((void*) data_buf, (void*) m_data_map[address], getCacheBlockSize());
-   }
-   SubsecondTime dram_access_latency = runDramPerfModel(requester, now, address, READ, perf,is_metadata);
-
-   ++m_reads;
-   #ifdef ENABLE_DRAM_ACCESS_COUNT
-   addToDramAccessCount(address, READ);
-   #endif
-   MYLOG("R @ %08lx latency %s", address, itostr(dram_access_latency).c_str());
-
-   return boost::tuple<SubsecondTime, HitWhere::where_t>(dram_access_latency, HitWhere::DRAM);
+    return {dram_access_latency, HitWhere::DRAM};
 }
 
+
 boost::tuple<SubsecondTime, HitWhere::where_t>
-DramCntlr::putDataToDram(IntPtr address, core_id_t requester, Byte* data_buf, SubsecondTime now,bool is_metadata)
+DramCntlr::putDataToDram(IntPtr address, core_id_t requester, Byte* data_buf, SubsecondTime now,bool is_metadata, int blocktype)
 {
    if (Sim()->getFaultinjectionManager())
    {

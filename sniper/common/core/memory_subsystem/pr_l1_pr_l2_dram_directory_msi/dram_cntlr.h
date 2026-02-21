@@ -36,17 +36,24 @@ namespace PrL1PrL2DramDirectoryMSI
          void addToDramAccessCount(IntPtr address, access_t access_type);
          void printDramAccessCount(void);
 
+         std::map<IntPtr, std::pair<SubsecondTime, SubsecondTime>> m_dram_addresses;
+         std::map<IntPtr, IntPtr> m_ptw_chain;
+
       public:
          DramCntlr(MemoryManagerBase* memory_manager,
                ShmemPerfModel* shmem_perf_model,
                UInt32 cache_block_size,AddressHomeLookup* address_home_lookup);
 
          ~DramCntlr();
+         
+         void setPTWChainEntry(IntPtr producer, IntPtr consumer) { m_ptw_chain[producer] = consumer; }
+         IntPtr getPTWChainEntry(IntPtr producer) { return m_ptw_chain[producer]; } 
+         void removePTWChainEntry(IntPtr producer) { m_ptw_chain.erase(producer); }  
 
          DramPerfModel* getDramPerfModel() { return m_dram_perf_model; }
 
          // Run DRAM performance model. Pass in begin time, returns latency
-         boost::tuple<SubsecondTime, HitWhere::where_t> getDataFromDram(IntPtr address, core_id_t requester, Byte* data_buf, SubsecondTime now, ShmemPerf *perf,bool is_matadata);
-         boost::tuple<SubsecondTime, HitWhere::where_t> putDataToDram(IntPtr address, core_id_t requester, Byte* data_buf, SubsecondTime now,bool is_matadata);
+         boost::tuple<SubsecondTime, HitWhere::where_t> getDataFromDram(IntPtr address, core_id_t requester, Byte* data_buf, SubsecondTime now, ShmemPerf *perf,bool is_metadata, int blocktype=CacheBlockInfo::NUM_BLOCK_TYPES);
+         boost::tuple<SubsecondTime, HitWhere::where_t> putDataToDram(IntPtr address, core_id_t requester, Byte* data_buf, SubsecondTime now,bool is_metadata, int blocktype=CacheBlockInfo::NUM_BLOCK_TYPES);
    };
 }

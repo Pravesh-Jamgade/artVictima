@@ -462,6 +462,8 @@ namespace ParametricDramDirectoryMSI
          void enable() { m_master->m_cache->enable(); }
          void disable() { m_master->m_cache->disable(); }
 
+         void initiateDirectoryAccessNoWait(IntPtr address, CacheBlockInfo::block_type_t block_type);
+
          friend class CacheCntlrList;
          friend class MemoryManager;
    };

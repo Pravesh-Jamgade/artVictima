@@ -740,11 +740,15 @@
 
          // Create Performance Modes
          for(UInt32 i = MemComponent::FIRST_LEVEL_CACHE; i <= (UInt32)m_last_level_cache; ++i)
-            m_cache_perf_models[(MemComponent::component_t)i] = CachePerfModel::create(
+         {
+             m_cache_perf_models[(MemComponent::component_t)i] = CachePerfModel::create(
             cache_parameters[(MemComponent::component_t)i].perf_model_type,
             cache_parameters[(MemComponent::component_t)i].data_access_time,
             cache_parameters[(MemComponent::component_t)i].tags_access_time
             );
+
+            std::cout << "Cache level " << String(MemComponentString((MemComponent::component_t)i)) << " tag access time: " << cache_parameters[(MemComponent::component_t)i].tags_access_time << std::endl;
+         }
 
 
          if (m_dram_cntlr_present)
@@ -1416,6 +1420,13 @@
                      break;
                   }
 
+                  case MemComponent::DRAM:
+                  {
+                     DramCntlrInterface* dram_interface = m_dram_cache ? (DramCntlrInterface*)m_dram_cache : (DramCntlrInterface*)m_dram_cntlr;
+                     dram_interface->handleMsgFromTagDirectory(sender, shmem_msg);
+                     break;
+                  }
+
                   default:
                      LOG_PRINT_ERROR("Unrecognized sender component(%u)",
                            sender_mem_component);
@@ -1445,19 +1456,21 @@
       void
       MemoryManager::sendMsg(PrL1PrL2DramDirectoryMSI::ShmemMsg::msg_t msg_type, MemComponent::component_t sender_mem_component, MemComponent::component_t receiver_mem_component, core_id_t requester, core_id_t receiver, IntPtr address, Byte* data_buf, UInt32 data_length, HitWhere::where_t where, ShmemPerf *perf, ShmemPerfModel::Thread_t thread_num, CacheBlockInfo::block_type_t block_type)
       {
+         String from_str = String(MemComponentString(sender_mem_component));
+         String to_str = String(MemComponentString(receiver_mem_component));
+         // std::cout <<  "Sending message  from " << from_str << " to " << to_str << " address 0x" << std::hex << address << " sim: " << std::dec << getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD).getNS() << " ns usr: " << std::dec << getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD).getNS() << " ns\n";
          //std::cout<<"Address: "<<address<<"\n";
       MYLOG("send msg %u %ul%u > %ul%u", msg_type, requester, sender_mem_component, receiver, receiver_mem_component);
          assert((data_buf == NULL) == (data_length == 0));
          PrL1PrL2DramDirectoryMSI::ShmemMsg shmem_msg(msg_type, sender_mem_component, receiver_mem_component, requester, address, data_buf, data_length, perf, block_type);
          shmem_msg.setWhere(where);
-
-         Byte* msg_buf = shmem_msg.makeMsgBuf();
          SubsecondTime msg_time = getShmemPerfModel()->getElapsedTime(thread_num);
          perf->updateTime(msg_time);
+         Byte* msg_buf = shmem_msg.makeMsgBuf();
 
          if (m_enabled)
          {
-            LOG_PRINT("Sending Msg: type(%u), address(0x%x), sender_mem_component(%u), receiver_mem_component(%u), requester(%i), sender(%i), receiver(%i)", msg_type, address, sender_mem_component, receiver_mem_component, requester, getCore()->getId(), receiver);
+            LOG_PRINT("Sending Msg: type(%u), address(0x%x), sender_mem_component(%s), receiver_mem_component(%s), requester(%i), sender(%i), receiver(%i)", msg_type, address, from_str.c_str(), to_str.c_str(), requester, getCore()->getId(), receiver);
          }
 
          NetPacket packet(msg_time, SHARED_MEM_1,

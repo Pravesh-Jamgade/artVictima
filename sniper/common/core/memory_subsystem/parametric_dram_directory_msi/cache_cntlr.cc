@@ -137,6 +137,29 @@ CacheMasterCntlr::~CacheMasterCntlr()
    }
 }
 
+void CacheCntlr::initiateDirectoryAccessNoWait(
+            IntPtr address,
+            CacheBlockInfo::block_type_t block_type
+         )
+{
+      // Don’t enqueue CacheDirectoryWaiter at all.
+
+      // Use a dedicated msg type or treat it as a prefetch-like request.
+      // Use a dummy ShmemPerf pointer so no core gets time-adjusted later.
+      m_dummy_shmem_perf.reset(SubsecondTime::Zero(), INVALID_CORE_ID);
+      // std::cout <<  "Sending message address 0x" << std::hex << address << " sim: " << std::dec << getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD).getNS() << " ns usr: " << std::dec << getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD).getNS() << " ns\n";
+
+      getMemoryManager()->sendMsg(
+            PrL1PrL2DramDirectoryMSI::ShmemMsg::DRAM_SPECIAL_READ_REQ,  // new msg
+            MemComponent::DRAM, MemComponent::DRAM,
+            m_core_id_master, getHome(address), address,
+            NULL, 0, HitWhere::UNKNOWN,
+            &m_dummy_shmem_perf,
+            ShmemPerfModel::_SIM_THREAD,
+            CacheBlockInfo::block_type_t::PREFETCH_PAGE_TABLE
+      );
+}
+
 CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
       String name,
       core_id_t core_id,
@@ -176,6 +199,8 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
 {
    m_core_id_master = m_core_id - m_core_id % m_shared_cores;
    Sim()->getStatsManager()->logTopology(name, core_id, m_core_id_master);
+
+   std::cout << "Creating cache controller for " << name << " with core_id: " << core_id << " and master core id: " << m_core_id_master << std::endl;
 
    LOG_ASSERT_ERROR(!Sim()->getCfg()->hasKey("perf_model/perfect_llc"),
                     "perf_model/perfect_llc is deprecated, use perf_model/lX_cache/perfect instead");
@@ -385,6 +410,8 @@ CacheCntlr::processMemOpFromCore(
       IntPtr original_address)
 {
 
+   MYLOG("ISSUE at %s addr=%lx tu=%lu ts=%lu passing_t_issue=%lu",
+      getCache()->getName().c_str(), ca_address, t_start.getNS(), getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD).getNS(), t_issue.getNS());
    HitWhere::where_t hit_where = HitWhere::MISS;
 
    bool metadata_request= (block_type==CacheBlockInfo::block_type_t::PAGE_TABLE) 
@@ -436,8 +463,7 @@ CacheCntlr::processMemOpFromCore(
          
    }
    #endif
-
-
+ 
    SubsecondTime t_start = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
 
    if (tempo_prefetch_enabled
@@ -548,6 +574,10 @@ CacheCntlr::processMemOpFromCore(
       // Update the Cache Counters
       getCache()->updateCounters(cache_hit);
       updateCounters(mem_op_type, ca_address, cache_hit, getCacheState(cache_block_info), block_type,Prefetch::NONE);
+
+      // if(metadata_request && modeled){
+      //    std::cout << "Lookup " << getCache()->getName() << " address " <<std::hex<< ca_address<<std::dec << " at time " << getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD).getNS() << " ns" << std::endl;
+      // }
    }
 
   
@@ -646,7 +676,13 @@ CacheCntlr::processMemOpFromCore(
       /* cache miss: either wrong coherency state or not present in the cache */
       MYLOG("L1 miss");
       if (!m_passthrough && !(block_type == CacheBlockInfo::block_type_t::TLB_ENTRY_PASSTHROUGH))
+      {
+         // std::cout << "Cache miss in " << getCache()->getName() << " for address 0x" << std::hex << ca_address << std::dec << " at time " << getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD).getNS() << " ns\n";
          getMemoryManager()->incrElapsedTime(m_mem_component, CachePerfModel::ACCESS_CACHE_TAGS, ShmemPerfModel::_USER_THREAD);
+      }
+      
+      // if(metadata_request && modeled)
+      //    std::cout << "Miss " << getCache()->getName() << " address " <<std::hex<< ca_address<<std::dec << " at time " << getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD).getNS() << " ns" << std::endl;
 
       SubsecondTime t_miss_begin = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
       SubsecondTime t_mshr_avail = t_miss_begin;
@@ -690,13 +726,11 @@ CacheCntlr::processMemOpFromCore(
          invalidateCacheBlock(ca_address);
       }
 
+      //pravesh
+      SubsecondTime new_t_start = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
 
       MYLOG("processMemOpFromCore l%d before next", m_mem_component);
-      hit_where = m_next_cache_cntlr->processShmemReqFromPrevCache(eip, this, mem_op_type, ca_address, modeled, count,block_type, Prefetch::NONE, t_start, false, mem_origin);
-      
-      // if(metadata_request)
-      // std::cout << getCache()->getName() << ", count, " << count << ", model, " << modeled << ", hitwhere, " << String(HitWhereString(hit_where)) << ", 1st Try: address = " << std::hex << ca_address << std::dec << ", mem_op_type = " << (mem_op_type == Core::READ ? "READ" : "WRITE") << ", block_type = " << block_type << ", mem_origin = " << mem_origin << std::endl;
-
+      hit_where = m_next_cache_cntlr->processShmemReqFromPrevCache(eip, this, mem_op_type, ca_address, modeled, count,block_type, Prefetch::NONE, new_t_start, false, mem_origin);
       bool next_cache_hit = hit_where != HitWhere::MISS;
       // if(hit_where != HitWhere::MISS && metadata_request &&  (metadata_passthrough_loc > 2))
       //    std::cout << "Metadata hit in L2 on address:" <<  ca_address << std::endl;
@@ -730,9 +764,6 @@ CacheCntlr::processMemOpFromCore(
 	         //if(!(metadata_request &&  (metadata_passthrough_loc > 2))) //If L2 is passthrough, then we wont find the data inside the L2
 	         hit_where = m_next_cache_cntlr->processShmemReqFromPrevCache(eip, this, mem_op_type, ca_address, false, false,block_type, Prefetch::NONE, t_start, true, mem_origin);
             
-            // if(metadata_request)
-            // std::cout << getCache()->getName() << ", count, " << count << ", model, " << modeled << ", hitwhere, " << String(HitWhereString(hit_where))<< ", 2nd Try: address = " << std::hex << ca_address << std::dec << ", mem_op_type = " << (mem_op_type == Core::READ ? "READ" : "WRITE") << ", block_type = " << block_type << ", mem_origin = " << mem_origin << std::endl;
-
             MYLOG("processMemOpFromCore l%d after next fill", m_mem_component);
             
             if(!(metadata_request &&  (metadata_passthrough_loc > 2))) //If L2 is passthrough, then we wont find the data inside the L2
@@ -753,15 +784,6 @@ CacheCntlr::processMemOpFromCore(
       {
 
          copyDataFromNextLevel(mem_op_type, ca_address, modeled, t_now, block_type);
-
-         // // removing block and testing L3 hit
-         // CacheBlockInfo* block = getCacheBlockInfo(ca_address);
-         // if(block->getCState() == CacheState::SHARED)
-         // {
-         //    m_next_cache_cntlr->invalidateCacheBlock(ca_address);
-         //    hit_where = m_next_cache_cntlr->processShmemReqFromPrevCache(eip, this, mem_op_type, ca_address, false, false,block_type, Prefetch::NONE, t_start, true, mem_origin);
-         //    std::cout << "Invalidated Search, " << getCache()->getName() << ", count, " << count << ", model, " << modeled << ", hitwhere, " << String(HitWhereString(hit_where)) << ", 3rd Try: address = " << std::hex << ca_address << std::dec << ", mem_op_type = " << (mem_op_type == Core::READ ? "READ" : "WRITE") << ", block_type = " << block_type << ", mem_origin = " << mem_origin << std::endl;
-         // }
 
          cache_block_info = getCacheBlockInfo(ca_address);
 
@@ -910,9 +932,8 @@ CacheCntlr::processMemOpFromCore(
          if (pushed)
          {
             prefetch_cache->Prefetch(eip, prefetch_time);
-            EarlyFetchMetadata early_fetch_metadata = prefetch_cache->get_prefetch_metadata(prefetch_address);
-            SubsecondTime prefetch_issue = early_fetch_metadata.m_last_prefetch_issue;
-            SubsecondTime prefetch_done = early_fetch_metadata.m_last_prefetch_done;
+            SubsecondTime prefetch_issue = prefetch_cache->getLastPrefetchIssue();
+            SubsecondTime prefetch_done = prefetch_cache->getLastPrefetchDone();
             if (prefetch_done > prefetch_issue)
             {
                tempo_prefetch_times[prefetch_address] = {prefetch_issue, prefetch_done};
@@ -1124,6 +1145,8 @@ CacheCntlr::doPrefetch(IntPtr eip, IntPtr prefetch_address, SubsecondTime t_star
 HitWhere::where_t
 CacheCntlr::processShmemReqFromPrevCache(IntPtr eip, CacheCntlr* requester, Core::mem_op_t mem_op_type, IntPtr address, bool modeled, bool count,CacheBlockInfo::block_type_t block_type, Prefetch::prefetch_type_t isPrefetch, SubsecondTime t_issue, bool have_write_lock, Core::mem_origin_t mem_origin)
 {
+   
+   // std::cout << "processShmemReqFromPrevCache: " << getCache()->getName() << ", model, " << modeled << ", count, " << count << " address = " << std::hex << address << std::dec << " sim: " << getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD).getNS() << " ns, usr: " << getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD).getNS() << " ns " << std::endl;
    #ifdef PRIVATE_L2_OPTIMIZATION
    bool have_write_lock_internal = have_write_lock;
    if (! have_write_lock && m_shared_cores > 1)
@@ -1141,7 +1164,6 @@ CacheCntlr::processShmemReqFromPrevCache(IntPtr eip, CacheCntlr* requester, Core
                            (block_type == CacheBlockInfo::block_type_t::EXPRESSIVE) ||  
                            (block_type == CacheBlockInfo::block_type_t::TLB_ENTRY) ||
                            (block_type == CacheBlockInfo::block_type_t::TLB_ENTRY_PASSTHROUGH);
-   
    
    bool cache_hit = operationPermissibleinCache(address, mem_op_type), sibling_hit = false, prefetch_hit = false;
    bool first_hit = cache_hit;
@@ -1197,13 +1219,13 @@ CacheCntlr::processShmemReqFromPrevCache(IntPtr eip, CacheCntlr* requester, Core
       if (isPrefetch == Prefetch::NONE)
          getCache()->updateCounters(cache_hit);
       updateCounters(mem_op_type, address, cache_hit, getCacheState(address), block_type,isPrefetch);
+
+      // if(metadata_request && modeled)
+      //    std::cout << "Lookup " << getCache()->getName() << " address " <<std::hex<< address<<std::dec << " at time " << getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD).getNS() << " ns" << std::endl;
    }
 
-   // if(metadata_request)
-   //    std::cout << getCache()->getName() << ", count, " << count << ", model, " << modeled << ", hit, " << cache_hit << ", " << std::hex << address << std::dec << ", mem_op_type = " << (mem_op_type == Core::READ ? "READ" : "WRITE") << ", block_type = " << block_type << ", mem_origin = " << mem_origin << std::endl;
-
    if (cache_hit)
-   {     
+   {
       if (isPrefetch == Prefetch::NONE && cache_block_info->hasOption(CacheBlockInfo::PREFETCH))
       {
          // This line was fetched by the prefetcher and has proven useful
@@ -1330,6 +1352,9 @@ CacheCntlr::processShmemReqFromPrevCache(IntPtr eip, CacheCntlr* requester, Core
       if (modeled)
          getMemoryManager()->incrElapsedTime(m_mem_component, CachePerfModel::ACCESS_CACHE_TAGS, ShmemPerfModel::_USER_THREAD);
 
+      // if(metadata_request && modeled)
+      //    std::cout << "Miss " << getCache()->getName() << " address " <<std::hex<< address<<std::dec << " at time " << getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD).getNS() << " ns" << std::endl;
+
       if (cache_block_info && (cache_block_info->getCState() == CacheState::SHARED))
       {
          // Data is present, but still no cache_hit => this is a write on a SHARED block. Do Upgrade
@@ -1354,8 +1379,11 @@ CacheCntlr::processShmemReqFromPrevCache(IntPtr eip, CacheCntlr* requester, Core
             invalidateCacheBlock(address);
          }
 
+         // pravesh
+         SubsecondTime new_t_issue = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
+
          // let the next cache level handle it.
-         hit_where = m_next_cache_cntlr->processShmemReqFromPrevCache(eip, this, mem_op_type, address, modeled, count,block_type, isPrefetch == Prefetch::NONE ? Prefetch::NONE : Prefetch::OTHER, t_issue, have_write_lock_internal, mem_origin);
+         hit_where = m_next_cache_cntlr->processShmemReqFromPrevCache(eip, this, mem_op_type, address, modeled, count,block_type, isPrefetch == Prefetch::NONE ? Prefetch::NONE : Prefetch::OTHER, new_t_issue, have_write_lock_internal, mem_origin);
          if (hit_where != HitWhere::MISS)
          {
             cache_hit = true;
@@ -1391,7 +1419,6 @@ CacheCntlr::processShmemReqFromPrevCache(IntPtr eip, CacheCntlr* requester, Core
          }
          else if (m_master->m_dram_cntlr)
          {
-            // std::cout << "master->dram, address, " << std::hex << address << std::dec << '\n';
             // Direct DRAM access
             cache_hit = true;
             if (cache_block_info)
@@ -1422,9 +1449,13 @@ CacheCntlr::processShmemReqFromPrevCache(IntPtr eip, CacheCntlr* requester, Core
          }
          else
          {
-            // std::cout << "directory, address, " << std::hex << address << std::dec << '\n';
+            // pravesh
+            SubsecondTime new_t_issue = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
+
+            // if(metadata_request && modeled)
+            //    std::cout << "Issue Directory "<< " address " <<std::hex<< address<<std::dec << " at time " << t_issue.getNS() << std::endl;
             
-            initiateDirectoryAccess(mem_op_type, address, block_type,isPrefetch != Prefetch::NONE, t_issue);
+               initiateDirectoryAccess(mem_op_type, address, block_type,isPrefetch != Prefetch::NONE, new_t_issue);
          }
       }
    }
@@ -1815,8 +1846,7 @@ SharedCacheBlockInfo*
 CacheCntlr::insertCacheBlock(IntPtr address, CacheState::cstate_t cstate, Byte* data_buf, core_id_t requester, ShmemPerfModel::Thread_t thread_num, CacheBlockInfo::block_type_t block_type)
 {
 
-   //std::cout << getCache()->getName() << ", FILLLINE: address = " << std::hex << address <<", block_type = " << block_type << "cstate = " << cstate << std::endl;
-
+   // std::cout << "Inserting " << getCache()->getName() << " address:" << std::hex << address << std::dec << " sim: " << getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD).getNS() << " ns, usr: " << getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD).getNS() << " ns" << std::endl;
  
    MYLOG("insertCacheBlock at %s l%d @ %lx as %c (now %c)", getCache()->getName().c_str(), m_mem_component, address, CStateString(cstate), CStateString(getCacheState(address)));
    //std::cout << "Inserting cache block at cache: " << getCache()->getName() << " with address:" << address << " with type: " << block_type << std::endl;
@@ -2236,8 +2266,6 @@ void
 CacheCntlr::handleMsgFromDramDirectory(
       core_id_t sender, PrL1PrL2DramDirectoryMSI::ShmemMsg* shmem_msg)
 {
-   // std::cout << "handleMsgFromDramDirectory, address, " << std::hex << shmem_msg->getAddress() << std::dec << '\n';
-
    PrL1PrL2DramDirectoryMSI::ShmemMsg::msg_t shmem_msg_type = shmem_msg->getMsgType();
    IntPtr address = shmem_msg->getAddress();
    core_id_t requester = INVALID_CORE_ID;
@@ -2365,8 +2393,6 @@ MYLOG("processExRepFromDramDirectory l%d", m_mem_component);
    Byte* data_buf = shmem_msg->getDataBuf();
 
    // @RBERA: this is CacheBlockInfo::block_type_t leak
-   // std::cout << "EXReqFromDRAMDire, address, " << std::hex << shmem_msg->getAddress() << std::dec << '\n';
-
    insertCacheBlock(address, CacheState::EXCLUSIVE, data_buf, requester, ShmemPerfModel::_SIM_THREAD,shmem_msg->getBlockType());
 MYLOG("processExRepFromDramDirectory l%d end", m_mem_component);
 }
@@ -2383,7 +2409,6 @@ MYLOG("processShRepFromDramDirectory l%d", m_mem_component);
 
    // Insert Cache Block in L2 Cache
    // @RBERA: this is CacheBlockInfo::block_type_t leak
-   // std::cout << "ShReqFromDRAMDire, address, " << std::hex << shmem_msg->getAddress() << std::dec << '\n';
    insertCacheBlock(address, CacheState::SHARED, data_buf, requester, ShmemPerfModel::_SIM_THREAD,shmem_msg->getBlockType());
 }
 
@@ -2837,4 +2862,5 @@ CacheCntlr::getNetworkThreadSemaphore()
 }
 
 }
+
    

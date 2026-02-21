@@ -507,7 +507,7 @@ DramDirectoryCntlr::processShReqFromL2Cache(ShmemReq* shmem_req, Byte* cached_da
    DirectoryEntry* directory_entry = m_dram_directory_cache->getDirectoryEntry(address);
    if (directory_entry == NULL)
    {
-      //std::cout<<"Process Directory Entry Allocation Req : "<<__LINE__<<std::endl;
+      // std::cout<<"Process Directory Entry Allocation Req : "<<__LINE__<<std::endl;
       directory_entry = processDirectoryEntryAllocationReq(shmem_req);
    }
 
