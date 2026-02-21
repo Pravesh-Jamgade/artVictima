@@ -27,6 +27,10 @@ DramCntlr::DramCntlr(MemoryManagerBase* memory_manager,
    : DramCntlrInterface(memory_manager, shmem_perf_model, cache_block_size)
    , m_reads(0)
    , m_writes(0)
+   , m_overlap_count(0)
+   , m_overlap_latency_cycles(0)
+   , m_ready_before_demand_count(0)
+   , m_special_requests(0)
    , address_home_lookup(_address_home_lookup)
 
 {
@@ -41,6 +45,10 @@ DramCntlr::DramCntlr(MemoryManagerBase* memory_manager,
    m_dram_access_count = new AccessCountMap[DramCntlrInterface::NUM_ACCESS_TYPES];
    registerStatsMetric("dram", memory_manager->getCore()->getId(), "reads", &m_reads);
    registerStatsMetric("dram", memory_manager->getCore()->getId(), "writes", &m_writes);
+   registerStatsMetric("dram", memory_manager->getCore()->getId(), "overlap_count", &m_overlap_count);
+   registerStatsMetric("dram", memory_manager->getCore()->getId(), "overlap_latency_cycles", &m_overlap_latency_cycles);
+   registerStatsMetric("dram", memory_manager->getCore()->getId(), "ready_before_demand_count", &m_ready_before_demand_count);
+   registerStatsMetric("dram", memory_manager->getCore()->getId(), "special_requests", &m_special_requests);
 }
 
 DramCntlr::~DramCntlr()
@@ -69,8 +77,20 @@ DramCntlr::getDataFromDram(IntPtr address, core_id_t requester, Byte* data_buf,
 
          ++m_reads;
          m_dram_addresses.erase(it);
-         
+
          SubsecondTime latency = (ready_time > now) ? (ready_time - now) : SubsecondTime::Zero();
+         SubsecondTime overlapped_latency = (now > issued_at) ? (now - issued_at) : SubsecondTime::Zero();
+
+         if (overlapped_latency > SubsecondTime::Zero())
+         {
+            ++m_overlap_count;
+            m_overlap_latency_cycles += SubsecondTime::divideRounded(overlapped_latency, m_memory_manager->getCore()->getDvfsDomain()->getPeriod());
+         }
+
+         if (ready_time <= now)
+         {
+            ++m_ready_before_demand_count;
+         }
 
          return {latency, HitWhere::DRAM};
         // If you ever want to model “arrived too early”, you can return (ready_time - now)
@@ -83,6 +103,7 @@ DramCntlr::getDataFromDram(IntPtr address, core_id_t requester, Byte* data_buf,
 
     if(blocktype == CacheBlockInfo::PREFETCH_PAGE_TABLE)
     {
+      ++m_special_requests;
       // std::cout << "Track type, " << ((blocktype == CacheBlockInfo::PREFETCH_PAGE_TABLE) ? "PREFETCH_PAGE_TABLE" : "OTHER") << ", address, " <<std::hex<< address <<std::dec<< '\n';
       // Store completion time in DRAM's timeline: ready_time, issue_time
       m_dram_addresses[address] = {now + dram_access_latency, now};
@@ -95,7 +116,7 @@ DramCntlr::getDataFromDram(IntPtr address, core_id_t requester, Byte* data_buf,
          auto result = getDataFromDram(ptw_consumer, requester, data_buf, newIssue, perf, is_metadata, blocktype);
          
          // std::cout << "Consumer 0x" << std::hex << ptw_consumer << std::dec << " issue " << newIssue.getNS() << " ns, ready at " << (newIssue + result.get<0>()).getNS() << " ns\n";
-         m_dram_addresses[ptw_consumer] = {newIssue + result.get<0>(), now};
+         m_dram_addresses[ptw_consumer] = {newIssue + result.get<0>(), newIssue};
 
          dram_access_latency += result.get<0>();
       }
