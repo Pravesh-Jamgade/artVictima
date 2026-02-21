@@ -653,57 +653,7 @@ namespace ParametricDramDirectoryMSI{
                     // std::cout << "PTW Level " << level << " Access Address: 0x" << std::hex << cache_address  << std::dec << " at " << getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD).getNS() << " ns\n";
                     Core::mem_origin_t radix_origin = static_cast<Core::mem_origin_t>(level);
 
-                    // send PD requets if it is in DRAM
-                    bool pde_level = (level_index == stats_radix.number_of_levels - 2);
-                    bool pte_level = (level_index == stats_radix.number_of_levels - 1);
-
-                    HitWhere::where_t hit_where = HitWhere::where_t::MISS;
-
-                    if(pde_level || pte_level){
-                        bool entry_only_in_dram = true;
-                        // softlookup
-                        if(mem_manager){
-                            auto has_line = [&](MemComponent::component_t component) {
-                                CacheCntlr *cntlr = mem_manager->getCacheCntlrAt(core->getId(), component);
-                                return cntlr && cntlr->getCache() && cntlr->getCache()->peekSingleLine(cache_address);
-                            };
-                            bool in_l1 = has_line(MemComponent::L1_DCACHE);
-                            bool in_l2 = has_line(MemComponent::L2_CACHE);
-                            bool in_llc = has_line(MemComponent::LAST_LEVEL_CACHE);
-                            // Soft lookup only for the direct DRAM data path.
-                            entry_only_in_dram = !(in_l1 || in_l2 || in_llc);
-                        }
-
-                        // if in dram, then start direct path + early fetch (if PDE other wise only direct path)
-                        if(entry_only_in_dram)
-                        {
-                            CacheCntlr* dram_queue_cache = cache;
-                            if(mem_manager)
-                                dram_queue_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::LAST_LEVEL_CACHE);
-
-                            if(dram_queue_cache){
-                                SubsecondTime dram_issue = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
-                                bool pushed = dram_queue_cache->enqueuePrefetch(cache_address, dram_issue);
-                                if(pushed){
-                                    dram_queue_cache->Prefetch(eip, dram_issue);
-                                    EarlyFetchMetadata metadata = dram_queue_cache->get_prefetch_metadata(cache_address);
-                                    DramTranslationBufferEntry pte_entry = {
-                                        cache_address,
-                                        level + 1,
-                                        metadata.m_last_prefetch_issue,
-                                        metadata.m_last_prefetch_done,
-                                        metadata.hit_where
-                                    };
-                                    dram_translation_buffer.push_back(pte_entry);
-                                    if(dram_translation_buffer.size() > 128)
-                                        dram_translation_buffer.pop_front();
-                                }
-                                m_shmem_perf_model->setElapsedTime(ShmemPerfModel::_USER_THREAD, dram_issue);
-                            }
-                        }
-                    }
-                    
-                    hit_where = cache->processMemOpFromCore(
+                    HitWhere::where_t hit_where = cache->processMemOpFromCore(
                                             eip,
                                             lock_signal,
                                             Core::mem_op_t::READ,
