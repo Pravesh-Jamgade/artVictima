@@ -228,7 +228,7 @@ namespace ParametricDramDirectoryMSI
           IntPtr cache_address = address >> (page_size - 3);
           Cache* l1dcache = m_manager->getCache(MemComponent::component_t::L1_DCACHE);
           Cache* l2cache = m_manager->getCache(MemComponent::component_t::L2_CACHE);
-          Cache* nuca = nullptr;//m_manager->getNucaCache()->getCache();
+          Cache* nuca = m_manager->getNucaCache()->getCache();
           if(nuca == nullptr)
           {
             nuca = m_manager->getCacheCntlrAt(m_core_id,MemComponent::component_t::L3_CACHE)->getCache();
@@ -543,7 +543,7 @@ namespace ParametricDramDirectoryMSI
 
           Cache* l1dcache = m_manager->getCache(MemComponent::component_t::L1_DCACHE);
           Cache* l2cache = m_manager->getCache(MemComponent::component_t::L2_CACHE);
-          Cache* nuca = nullptr;//m_manager->getNucaCache()->getCache();
+          Cache* nuca = m_manager->getNucaCache()->getCache();
           if(nuca == nullptr)
           {
             nuca = m_manager->getCacheCntlrAt(m_core_id,MemComponent::component_t::L3_CACHE)->getCache();

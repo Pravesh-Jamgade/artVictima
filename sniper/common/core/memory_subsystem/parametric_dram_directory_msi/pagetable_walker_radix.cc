@@ -226,7 +226,7 @@ namespace ParametricDramDirectoryMSI{
         total_walk_latency = SubsecondTime::Zero();
         total_ptb_latency = SubsecondTime::Zero();
         early_fetch_enabled = Sim()->getCfg()->getBoolDefault("perf_model/ptb/early_fetch", false);
-        m_special_datapath_enabled = Sim()->getCfg()->getBoolDefault("perf_model/ptw/special_datapath", false);
+        m_special_datapath_enabled = Sim()->getCfg()->getBoolDefault("perf_model/ptb/special_datapath", false);
         overlap_samples = 0;
         overlap_ready = 0;
         overlap_ratio_sum_milli = 0;
@@ -603,6 +603,7 @@ namespace ParametricDramDirectoryMSI{
 
                     if(pde_level && m_special_datapath_enabled)
                     {
+                        // std::cout << "Test " << std::hex << " addr, " << cache_address << '\n';
                         bool found_in_dram = false;
                        
                         auto has_line = [&](MemComponent::component_t component, IntPtr addr) {
@@ -640,8 +641,8 @@ namespace ParametricDramDirectoryMSI{
                                 // std::cout << "Privilige PTW " << level << " address 0x" << std::hex << cache_address 
                                 //           << " at time " << std::dec << getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD).getNS() << " ns\n";
                                 
-                                CacheCntlr* llc_cntrl = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::L3_CACHE);
-                                llc_cntrl->initiateDirectoryAccessNoWait(cache_address, CacheBlockInfo::block_type_t::PREFETCH_PAGE_TABLE);
+                                CacheCntlr* i_just_need_cache_contoller = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::L2_CACHE);
+                                i_just_need_cache_contoller->initiateDirectoryAccessNoWait(cache_address, CacheBlockInfo::block_type_t::PREFETCH_PAGE_TABLE);
 
                                 m_shmem_perf_model->setElapsedTime(ShmemPerfModel::_USER_THREAD, fake_issue);
                                 // std::cout << "BeforeReset PTW " << level << " address 0x" << std::hex << cache_address 
@@ -738,16 +739,7 @@ namespace ParametricDramDirectoryMSI{
                         case HitWhere::DRAM_LOCAL:
                         case HitWhere::DRAM_REMOTE:
                         case HitWhere::DRAM_CACHE:
-                            prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::LAST_LEVEL_CACHE);
-                            break;
-                        case HitWhere::MISS:
-                        case HitWhere::SIBLING:
-                        case HitWhere::L1_SIBLING:
-                        case HitWhere::L2_SIBLING:
-                        case HitWhere::L3_SIBLING:
-                        case HitWhere::L4_SIBLING:
-                        default:
-                            prefetch_cache = cache;
+                            prefetch_cache = mem_manager->getLastLevelCache();
                             break;
                     }
                 }
