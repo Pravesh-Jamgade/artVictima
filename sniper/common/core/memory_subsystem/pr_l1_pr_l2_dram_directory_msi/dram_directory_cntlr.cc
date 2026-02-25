@@ -501,6 +501,8 @@ DramDirectoryCntlr::processShReqFromL2Cache(ShmemReq* shmem_req, Byte* cached_da
    IntPtr address = shmem_req->getShmemMsg()->getAddress();
    core_id_t requester = shmem_req->getShmemMsg()->getRequester();
 
+   std::cout << "Track Start processShReqFromL2Cache, addr, " << std::hex << address << std::dec << ", block_type, " << shmem_req->getBlockType() << '\n';
+
    MYLOG("Start @ %lx", address);
    updateShmemPerf(shmem_req);
 
@@ -558,6 +560,7 @@ DramDirectoryCntlr::processShReqFromL2Cache(ShmemReq* shmem_req, Byte* cached_da
                // Forwarder evicted the data while we requested it. Will have to get it from DRAM anyway.
                ++forward_failed;
             }
+
             retrieveDataAndSendToL2Cache(ShmemMsg::SH_REP, requester, address, cached_data_buf, shmem_req->getShmemMsg());
          }
          else
@@ -578,6 +581,8 @@ DramDirectoryCntlr::processShReqFromL2Cache(ShmemReq* shmem_req, Byte* cached_da
             }
             else
             {
+               std::cout << "Track Shared:processShReqFromL2Cache, addr, " << std::hex << address << std::dec << ", block_type, " << shmem_req->getBlockType() << '\n';
+
                MYLOG("SHARED state, retrieve data and send")
                retrieveDataAndSendToL2Cache(ShmemMsg::SH_REP, requester, address, cached_data_buf, shmem_req->getShmemMsg());
             }
@@ -587,6 +592,8 @@ DramDirectoryCntlr::processShReqFromL2Cache(ShmemReq* shmem_req, Byte* cached_da
 
       case DirectoryState::UNCACHED:
       {
+         std::cout << "Track Uncached:processShReqFromL2Cache, addr, " << std::hex << address << std::dec << ", block_type, " << shmem_req->getBlockType() << '\n';
+
          MYLOG("was UNCACHED, is now EXCLUSIVE")
          // Modifiy the directory entry contents
          bool add_result = directory_entry->addSharer(requester, m_dram_directory_cache->getMaxHwSharers());
@@ -649,6 +656,8 @@ DramDirectoryCntlr::retrieveDataAndSendToL2Cache(ShmemMsg::msg_t reply_msg_type,
    {
       if (m_nuca_cache)
       {
+         std::cout << "Track if_nuca, addr, " << std::hex << address << std::dec << " type, " << orig_shmem_msg->getBlockType() << '\n';
+
          SubsecondTime nuca_latency;
          HitWhere::where_t hit_where;
          Byte nuca_data_buf[getCacheBlockSize()];
@@ -658,6 +667,8 @@ DramDirectoryCntlr::retrieveDataAndSendToL2Cache(ShmemMsg::msg_t reply_msg_type,
 
          if (hit_where != HitWhere::MISS)
          {
+            std::cout << "Track nuca_miss, addr, " << std::hex << address << std::dec << " type, " << orig_shmem_msg->getBlockType() << '\n';
+
             getMemoryManager()->sendMsg(reply_msg_type,
                   MemComponent::TAG_DIR, MemComponent::L2_CACHE,
                   receiver /* requester */,
@@ -751,6 +762,8 @@ DramDirectoryCntlr::processDRAMReply(core_id_t sender, ShmemMsg* shmem_msg)
 
    updateShmemPerf(shmem_req, ShmemPerf::TD_ACCESS);
 
+   std::cout << "Track process_dram_reply, addr, " << std::hex << address << std::dec << ", type, " << shmem_msg->getBlockType() << '\n';
+
    switch(shmem_req->getShmemMsg()->getMsgType())
    {
       case ShmemMsg::SH_REQ:
@@ -797,7 +810,7 @@ DramDirectoryCntlr::processDRAMReply(core_id_t sender, ShmemMsg* shmem_msg)
          ShmemPerfModel::_SIM_THREAD,shmem_req->getBlockType());
 
    // Keep a copy in NUCA
-   sendDataToNUCA(address, shmem_req->getShmemMsg()->getRequester(), shmem_msg->getDataBuf(), getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD), false,shmem_msg->getBlockType());
+   sendDataToNUCA(address, shmem_req->getShmemMsg()->getRequester(), shmem_msg->getDataBuf(), getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD), false,shmem_req->getBlockType());
 
    // Process Next Request
    processNextReqFromL2Cache(address);
@@ -1227,6 +1240,7 @@ DramDirectoryCntlr::sendDataToNUCA(IntPtr address, core_id_t requester, Byte* da
 {
    if (m_nuca_cache)
    {
+      std::cout << "Track write_nuca, addr, " << std::hex << address << std::dec << ", block_type, " << block_type << '\n';
       bool eviction;
       IntPtr evict_address;
       Byte evict_buf[getCacheBlockSize()];

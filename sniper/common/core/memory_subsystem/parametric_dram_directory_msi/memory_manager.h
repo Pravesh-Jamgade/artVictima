@@ -236,6 +236,11 @@ namespace ParametricDramDirectoryMSI
          Cache* getCache(MemComponent::component_t mem_component) {
               return m_cache_cntlrs[mem_component == MemComponent::LAST_LEVEL_CACHE ? MemComponent::component_t(m_last_level_cache) : mem_component]->getCache();
          }
+
+         CacheCntlr* getLastLevelCacheController() {
+              return m_cache_cntlrs[MemComponent::component_t(m_last_level_cache)];
+         }
+
          Cache* getL1ICache() { return getCache(MemComponent::L1_ICACHE); }
          Cache* getL1DCache() { return getCache(MemComponent::L1_DCACHE); }
          PageTableWalker* getPTW(){return ptw;}

@@ -17,7 +17,7 @@ class CacheBlockInfo
 
       enum block_type_t
       {
-         PAGE_TABLE,
+         PAGE_TABLE=0,
          PAGE_TABLE_PASSTHROUGH,
          UTOPIA,
          SECURITY,
@@ -26,6 +26,7 @@ class CacheBlockInfo
          TLB_ENTRY_PASSTHROUGH, // used to store TLB entries inside the caches but passthrough L1 cache
          NON_PAGE_TABLE,
          PREFETCH_PAGE_TABLE, // used to track prefetched page table blocks
+         NUCA_PREFETCH_PAGE_TABLE, // used to track prefetched page table blocks
          NUM_BLOCK_TYPES
       };
 

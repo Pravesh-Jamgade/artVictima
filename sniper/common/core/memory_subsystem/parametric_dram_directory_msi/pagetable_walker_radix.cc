@@ -635,16 +635,20 @@ namespace ParametricDramDirectoryMSI{
                             if(found_in_dram)
                             {
                                 // std::cout << "Special Access Address: 0x" << std::hex << cache_address << ", 0x" << leaf_address << std::dec << " not found in cache, issuing early DRAM request\n";
-                                mem_manager->getDramCntlr()->setPTWChainEntry(cache_address, leaf_address);
+                                // mem_manager->getDramCntlr()->setPTWChainEntry(cache_address, leaf_address);
 
-                                SubsecondTime fake_issue = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
-                                // std::cout << "Privilige PTW " << level << " address 0x" << std::hex << cache_address 
-                                //           << " at time " << std::dec << getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD).getNS() << " ns\n";
-                                
-                                CacheCntlr* i_just_need_cache_contoller = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::L2_CACHE);
-                                i_just_need_cache_contoller->initiateDirectoryAccessNoWait(cache_address, CacheBlockInfo::block_type_t::PREFETCH_PAGE_TABLE);
+                                SubsecondTime timer_start_pde = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
+                            
+                                CacheCntlr* i_just_need_cache_contoller = mem_manager->getLastLevelCacheController();
+                                // i_just_need_cache_contoller->initiateDirectoryAccessNoWait(cache_address, CacheBlockInfo::block_type_t::PREFETCH_PAGE_TABLE);
 
-                                m_shmem_perf_model->setElapsedTime(ShmemPerfModel::_USER_THREAD, fake_issue);
+                                i_just_need_cache_contoller->initiateDirectoryAccess(Core::READ, cache_address, CacheBlockInfo::block_type_t::PREFETCH_PAGE_TABLE, true, timer_start_pde);
+
+                                SubsecondTime timer_start_pte = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
+
+                                i_just_need_cache_contoller->initiateDirectoryAccess(Core::READ, leaf_address, CacheBlockInfo::block_type_t::PREFETCH_PAGE_TABLE, true, timer_start_pte);
+
+                                m_shmem_perf_model->setElapsedTime(ShmemPerfModel::_USER_THREAD, timer_start_pde);
                                 // std::cout << "BeforeReset PTW " << level << " address 0x" << std::hex << cache_address 
                                 //           << " at time " << std::dec << getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD).getNS() << " ns\n";
                             }
@@ -727,6 +731,7 @@ namespace ParametricDramDirectoryMSI{
                 ptw_table* leaf_table = new_table->entries[a1].next_level_table;
                 IntPtr leaf_address = ((IntPtr)(&leaf_table->entries[leaf_index])) & (~((64 - 1)));
 
+                bool need_nuca_cache_access = false;
                 CacheCntlr* prefetch_cache = cache;
                 if(mem_manager){
                     switch (pd_hit_where){
@@ -739,7 +744,8 @@ namespace ParametricDramDirectoryMSI{
                         case HitWhere::DRAM_LOCAL:
                         case HitWhere::DRAM_REMOTE:
                         case HitWhere::DRAM_CACHE:
-                            prefetch_cache = mem_manager->getLastLevelCache();
+                            prefetch_cache = mem_manager->getLastLevelCacheController();
+                            need_nuca_cache_access = true;
                             break;
                     }
                 }
@@ -749,20 +755,48 @@ namespace ParametricDramDirectoryMSI{
                     return total_latency+InitializeWalkRecursive(eip,address,level+1,new_table->entries[a1].next_level_table,lock_signal,data_buf,data_length,modeled,count, traversal_path, allow_psc_lookup && !pd_psc_miss, psc_state, ptb_hit);
                 }
 
+                bool pushed = false;
                 SubsecondTime prefetch_time = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
-                bool pushed = prefetch_cache->enqueuePrefetch(leaf_address, prefetch_time);
+                if(need_nuca_cache_access)
+                {
+                    std::cout << "Early-Fetch, addr, " << std::hex << leaf_address << ", " << std::dec << prefetch_time.getNS() << '\n'; 
+                    //:initiateDirectoryAccess(Core::mem_op_t mem_op_type, IntPtr address, CacheBlockInfo::block_type_t block_type, bool isPrefetch, SubsecondTime t_issue)
+                    prefetch_cache->initiateDirectoryAccess(Core::READ, leaf_address, CacheBlockInfo::block_type_t::NUCA_PREFETCH_PAGE_TABLE, true, prefetch_time);
+                    SubsecondTime curr_now = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
+                    std::cout << "Out Early-Fetch, addr, " << std::hex << leaf_address << ", " << std::dec << curr_now.getNS() << '\n';
+                    pushed = true;
+                }
+                else
+                {
+                    std::cout << "Via Prefetch, addr, " << std::hex << leaf_address << ", " << std::dec << prefetch_time.getNS() << '\n';
+                    pushed = prefetch_cache->enqueuePrefetch(leaf_address, prefetch_time);
+                    SubsecondTime curr_now = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
+                    std::cout << "Out Via Prefetch, addr, " << std::hex << leaf_address << ", " << std::dec << curr_now.getNS() << '\n';
+                }
                 if(pushed)
                 {
-                    prefetch_cache->Prefetch(eip, prefetch_time);
-                    EarlyFetchMetadata early_fetch_metadata = prefetch_cache->get_prefetch_metadata(leaf_address);
+                    SubsecondTime prefetch_issue, prefetch_done;
+                    EarlyFetchMetadata early_fetch_metadata;
+                    if(need_nuca_cache_access)
+                    {
+                        prefetch_issue = prefetch_time;
+                        prefetch_done = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
+                    }
+                    else
+                    {
+                        prefetch_cache->Prefetch(eip, prefetch_time);
+                        early_fetch_metadata = prefetch_cache->get_prefetch_metadata(leaf_address);
+                        prefetch_issue = early_fetch_metadata.m_last_prefetch_issue;
+                        prefetch_done = early_fetch_metadata.m_last_prefetch_done;
+                    }
+                   
                     pwc->lookup(leaf_address, prefetch_time, true, level + 1, false);
 
-                    SubsecondTime prefetch_issue = early_fetch_metadata.m_last_prefetch_issue;
-                    SubsecondTime prefetch_done = early_fetch_metadata.m_last_prefetch_done;
-                    uint64_t delta = (prefetch_done > prefetch_issue)
-                        ? SubsecondTime::divideRounded(prefetch_done - prefetch_issue, core->getDvfsDomain()->getPeriod())
-                        : 0;
-                    prefeth_latency[early_fetch_metadata.hit_where].update(delta);
+                    
+                    // uint64_t delta = (prefetch_done > prefetch_issue)
+                    //     ? SubsecondTime::divideRounded(prefetch_done - prefetch_issue, core->getDvfsDomain()->getPeriod())
+                    //     : 0;
+                    // prefeth_latency[early_fetch_metadata.hit_where].update(delta);
                     if(count){
                         overlap_prefetch_state.valid = true;
                         overlap_prefetch_state.leaf_cache_line = leaf_address;
@@ -771,6 +805,8 @@ namespace ParametricDramDirectoryMSI{
                     }
                 }
                 m_shmem_perf_model->setElapsedTime(ShmemPerfModel::_USER_THREAD, prefetch_time);
+                SubsecondTime curr_now = m_shmem_perf_model->getElapsedTime(ShmemPerfModel::_USER_THREAD);
+                std::cout << "Reset Early-Fetch, addr, " << std::hex << leaf_address << ", " << std::dec << curr_now.getNS() << '\n';
             }
             return total_latency+InitializeWalkRecursive(eip,address,level+1,new_table->entries[a1].next_level_table,lock_signal,data_buf,data_length,modeled,count, traversal_path, allow_psc_lookup && !pd_psc_miss, psc_state, ptb_hit);
         
@@ -1215,10 +1251,10 @@ namespace ParametricDramDirectoryMSI{
                 fprintf(csv_fp, "proposed_TEMPO_overlap_tail_cycles_avg,%.2f\n", tempo_avg_tail);
             }
 
-            for(int i=0; i< HitWhere::NUM_HITWHERES; i++){
-                String label = String(("proposed_PTB_prefetch_latency_" + std::string(HitWhereString(static_cast<HitWhere::where_t>(i)))).c_str());
-                prefeth_latency[static_cast<HitWhere::where_t>(i)].printCsv(csv_fp, label.c_str());
-            }// 
+            // for(int i=0; i< HitWhere::NUM_HITWHERES; i++){
+            //     String label = String(("proposed_PTB_prefetch_latency_" + std::string(HitWhereString(static_cast<HitWhere::where_t>(i)))).c_str());
+            //     prefeth_latency[static_cast<HitWhere::where_t>(i)].printCsv(csv_fp, label.c_str());
+            // }// 
 
             fclose(csv_fp);
         }

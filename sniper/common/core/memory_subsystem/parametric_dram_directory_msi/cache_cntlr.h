@@ -351,7 +351,6 @@ namespace ParametricDramDirectoryMSI
 
          // Process Request from L1 Cache
          boost::tuple<HitWhere::where_t, SubsecondTime> accessDRAM(Core::mem_op_t mem_op_type, IntPtr address, bool isPrefetch, Byte* data_buf,bool metadata_request);
-         void initiateDirectoryAccess(Core::mem_op_t mem_op_type, IntPtr address, CacheBlockInfo::block_type_t block_type,bool isPrefetch, SubsecondTime t_issue);
          void processExReqToDirectory(IntPtr address,CacheBlockInfo::block_type_t block_type);
          void processShReqToDirectory(IntPtr address,CacheBlockInfo::block_type_t block_type);
          void processUpgradeReqToDirectory(IntPtr address, ShmemPerf *perf, ShmemPerfModel::Thread_t thread_num,CacheBlockInfo::block_type_t block_type);
@@ -463,6 +462,8 @@ namespace ParametricDramDirectoryMSI
          void disable() { m_master->m_cache->disable(); }
 
          void initiateDirectoryAccessNoWait(IntPtr address, CacheBlockInfo::block_type_t block_type);
+         void initiateNucaCacheAccess(IntPtr address, CacheBlockInfo::block_type_t block_type);
+         void initiateDirectoryAccess(Core::mem_op_t mem_op_type, IntPtr address, CacheBlockInfo::block_type_t block_type,bool isPrefetch, SubsecondTime t_issue);
 
          friend class CacheCntlrList;
          friend class MemoryManager;

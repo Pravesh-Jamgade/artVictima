@@ -61,6 +61,8 @@ char * BlockTypeString(CacheBlockInfo::block_type_t block_type) {
       case CacheBlockInfo::block_type_t::TLB_ENTRY:               return "tlb_entry";
       case CacheBlockInfo::block_type_t::TLB_ENTRY_PASSTHROUGH:   return "tlb_entry_passthrough";
       case CacheBlockInfo::block_type_t::PAGE_TABLE_PASSTHROUGH:  return "page_table_passthrough";
+      case CacheBlockInfo::block_type_t::PREFETCH_PAGE_TABLE:  return "prefetch_page_table";
+      case CacheBlockInfo::block_type_t::NUCA_PREFETCH_PAGE_TABLE:  return "nuca_prefetch_page_table";
 
       default:                            return "??";
    }
@@ -156,7 +158,26 @@ void CacheCntlr::initiateDirectoryAccessNoWait(
             NULL, 0, HitWhere::UNKNOWN,
             &m_dummy_shmem_perf,
             ShmemPerfModel::_SIM_THREAD,
-            CacheBlockInfo::block_type_t::PREFETCH_PAGE_TABLE
+            block_type
+      );
+}
+
+void CacheCntlr::initiateNucaCacheAccess(IntPtr address, CacheBlockInfo::block_type_t block_type){
+   // Don’t enqueue CacheDirectoryWaiter at all.
+
+      // Use a dedicated msg type or treat it as a prefetch-like request.
+      // Use a dummy ShmemPerf pointer so no core gets time-adjusted later.
+      m_dummy_shmem_perf.reset(SubsecondTime::Zero(), INVALID_CORE_ID);
+      // std::cout <<  "Sending message address 0x" << std::hex << address << " sim: " << std::dec << getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD).getNS() << " ns usr: " << std::dec << getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD).getNS() << " ns\n";
+
+      getMemoryManager()->sendMsg(
+            PrL1PrL2DramDirectoryMSI::ShmemMsg::SH_REQ,  // new msg
+            MemComponent::LAST_LEVEL_CACHE, MemComponent::TAG_DIR,
+            m_core_id_master, getHome(address), address,
+            NULL, 0, HitWhere::UNKNOWN,
+            &m_dummy_shmem_perf,
+            ShmemPerfModel::_SIM_THREAD,
+            block_type
       );
 }
 
@@ -943,7 +964,11 @@ CacheCntlr::processMemOpFromCore(
          }
       }
    }
-   
+
+   {
+      SubsecondTime curr_now = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
+      std::cout << "Hit Where, " << std::hex << ca_address << std::dec << ", block_type, " << block_type << ", where, " << hit_where << ", " << curr_now.getNS() << '\n';
+   }   
    return hit_where;
 }
 
@@ -1608,13 +1633,22 @@ CacheCntlr::initiateDirectoryAccess(Core::mem_op_t mem_op_type, IntPtr address, 
          LOG_PRINT_ERROR("Unsupported Mem Op Type(%u)", mem_op_type);
    }
 
+   bool special_lane_packet = (block_type == CacheBlockInfo::block_type_t::PREFETCH_PAGE_TABLE || block_type == CacheBlockInfo::block_type_t::NUCA_PREFETCH_PAGE_TABLE);
    bool first = false;
    {
-      ScopedLock sl(getLock());
-      CacheDirectoryWaiter* request = new CacheDirectoryWaiter(exclusive, block_type, isPrefetch, this, t_issue);
-      m_master->m_directory_waiters.enqueue(address, request);
-      if (m_master->m_directory_waiters.size(address) == 1)
-         first = true;
+      // // Should not be our special prefetch packet
+      // if(special_lane_packet)
+      // {
+      //    first = true;
+      // }
+      // else
+      {
+         ScopedLock sl(getLock());
+         CacheDirectoryWaiter* request = new CacheDirectoryWaiter(exclusive, block_type, isPrefetch, this, t_issue);
+         m_master->m_directory_waiters.enqueue(address, request);
+         if (m_master->m_directory_waiters.size(address) == 1)
+            first = true;
+      }
    }
 
    if (first)
@@ -1637,7 +1671,7 @@ CacheCntlr::initiateDirectoryAccess(Core::mem_op_t mem_op_type, IntPtr address, 
       }
       else
       {
-         
+         std::cout << "Shared, addr, " << std::hex << address << std::dec << ", block_type, " << block_type << '\n';
          processShReqToDirectory(address,block_type);
       }
    }
@@ -1691,8 +1725,13 @@ void
 CacheCntlr::processShReqToDirectory(IntPtr address,CacheBlockInfo::block_type_t block_type)
 {
 MYLOG("SH REQ @ %lx", address);
-//std::cout<<"Send Message from address: "<<std::hex<<address<<" processShReqToDirectory\n";
-   getMemoryManager()->sendMsg(PrL1PrL2DramDirectoryMSI::ShmemMsg::SH_REQ,
+
+   bool special_lane = (block_type == CacheBlockInfo::block_type_t::PREFETCH_PAGE_TABLE);
+   PrL1PrL2DramDirectoryMSI::ShmemMsg::msg_t shmem_msg;
+   shmem_msg = special_lane ? PrL1PrL2DramDirectoryMSI::ShmemMsg::DRAM_SPECIAL_READ_REQ: PrL1PrL2DramDirectoryMSI::ShmemMsg::SH_REQ;
+
+   //std::cout<<"Send Message from address: "<<std::hex<<address<<" processShReqToDirectory\n";
+   getMemoryManager()->sendMsg(shmem_msg,
          MemComponent::LAST_LEVEL_CACHE, MemComponent::TAG_DIR,
          m_core_id_master /* requester */,
          getHome(address) /* receiver */,
@@ -1847,7 +1886,14 @@ CacheCntlr::insertCacheBlock(IntPtr address, CacheState::cstate_t cstate, Byte* 
 {
 
    // std::cout << "Inserting " << getCache()->getName() << " address:" << std::hex << address << std::dec << " sim: " << getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD).getNS() << " ns, usr: " << getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD).getNS() << " ns" << std::endl;
- 
+   
+   if(block_type == CacheBlockInfo::block_type_t::PAGE_TABLE ||
+      block_type == CacheBlockInfo::block_type_t::PREFETCH_PAGE_TABLE ||
+      block_type == CacheBlockInfo::block_type_t::NUCA_PREFETCH_PAGE_TABLE 
+   ){
+      SubsecondTime curr_now = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
+      std::cout << "Track Insert, " << getCache()->getName() << ", addr, " << std::hex << address << std::dec << ", block_type, " << block_type << ", " << curr_now.getNS() << '\n';
+   }
    MYLOG("insertCacheBlock at %s l%d @ %lx as %c (now %c)", getCache()->getName().c_str(), m_mem_component, address, CStateString(cstate), CStateString(getCacheState(address)));
    //std::cout << "Inserting cache block at cache: " << getCache()->getName() << " with address:" << address << " with type: " << block_type << std::endl;
    bool metadata_request = (block_type == CacheBlockInfo::block_type_t::PAGE_TABLE) || 
