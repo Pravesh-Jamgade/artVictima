@@ -2365,6 +2365,11 @@ MYLOG("WB REQ<%u @ %lx", sender, address);
          CacheDirectoryWaiter* request = m_master->m_directory_waiters.front(address);
          getLock().release();
 
+         bool async_prefetch_waiter =
+            request->isPrefetch &&
+            (request->block_type == CacheBlockInfo::block_type_t::PREFETCH_PAGE_TABLE ||
+             request->block_type == CacheBlockInfo::block_type_t::NUCA_PREFETCH_PAGE_TABLE);
+
          request->cache_cntlr->m_shmem_perf->updateTime(getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD), ShmemPerf::PENDING_HIT);
 
          if (request->exclusive && (getCacheState(address) == CacheState::SHARED))
@@ -2397,11 +2402,14 @@ MYLOG("adjusting time in #%u from %lu to %lu", request->cache_cntlr->m_core_id, 
 MYLOG("wakeup user #%u", request->cache_cntlr->m_core_id);
          request->cache_cntlr->updateUncoreStatistics(shmem_msg->getWhere(), t_here);
 
-         //releaseStackLock(address);
-         // Pass stack lock through to user thread
-         wakeUpUserThread(request->cache_cntlr->m_user_thread_sem);
-         waitForUserThread(request->cache_cntlr->m_network_thread_sem);
-         acquireStackLock(address);
+         if (!async_prefetch_waiter)
+         {
+            // releaseStackLock(address);
+            // Pass stack lock through to user thread
+            wakeUpUserThread(request->cache_cntlr->m_user_thread_sem);
+            waitForUserThread(request->cache_cntlr->m_network_thread_sem);
+            acquireStackLock(address);
+         }
          if(request->block_type == CacheBlockInfo::block_type_t::NON_PAGE_TABLE)
          {
             ScopedLock sl(request->cache_cntlr->getLock());
