@@ -639,16 +639,8 @@ namespace ParametricDramDirectoryMSI{
 
                                 SubsecondTime timer_start_pde = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
                             
-                                CacheCntlr* i_just_need_cache_contoller = mem_manager->getLastLevelCacheController();
-                                // i_just_need_cache_contoller->initiateDirectoryAccessNoWait(cache_address, CacheBlockInfo::block_type_t::PREFETCH_PAGE_TABLE);
+                                mem_manager->getDramDirectoryCntlr()->handlePtwPrefetch(leaf_address, CacheBlockInfo::block_type_t::PREFETCH_PAGE_TABLE);
 
-                                i_just_need_cache_contoller->initiateDirectoryAccess(Core::READ, cache_address, CacheBlockInfo::block_type_t::PREFETCH_PAGE_TABLE, true, timer_start_pde);
-
-                                SubsecondTime timer_start_pte = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
-
-                                i_just_need_cache_contoller->initiateDirectoryAccess(Core::READ, leaf_address, CacheBlockInfo::block_type_t::PREFETCH_PAGE_TABLE, true, timer_start_pte);
-
-                                m_shmem_perf_model->setElapsedTime(ShmemPerfModel::_USER_THREAD, timer_start_pde);
                                 // std::cout << "BeforeReset PTW " << level << " address 0x" << std::hex << cache_address 
                                 //           << " at time " << std::dec << getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD).getNS() << " ns\n";
                             }

@@ -110,8 +110,10 @@ void DramDirectoryCntlr::handlePtwPrefetch(IntPtr address, CacheBlockInfo::block
    
     SubsecondTime t = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD);
 
+    ShmemMsg::msg_t msg_type = (block_type == CacheBlockInfo::block_type_t::PREFETCH_PAGE_TABLE) ? ShmemMsg::msg_t::DRAM_SPECIAL_READ_REQ : ShmemMsg::msg_t::PTW_NUCA_PREFETCH_REQ;
+
     ShmemMsg* msg = new ShmemMsg(
-        ShmemMsg::msg_t::PTW_NUCA_PREFETCH_REQ,
+        msg_type,
         MemComponent::TAG_DIR, MemComponent::DRAM,
         m_core_id /* requester can be core_id or PTW's core */,
         address,
@@ -127,8 +129,8 @@ void DramDirectoryCntlr::handlePtwPrefetch(IntPtr address, CacheBlockInfo::block
 
     core_id_t dram_node = m_dram_controller_home_lookup->getHome(address);
 
-    getMemoryManager()->sendMsg(ShmemMsg::PTW_NUCA_PREFETCH_REQ,
-        MemComponent::NUCA_CACHE, MemComponent::DRAM,
+    getMemoryManager()->sendMsg(msg_type,
+        MemComponent::TAG_DIR, MemComponent::DRAM,
         m_core_id /* requester */,
         dram_node /* receiver */,
         address,
