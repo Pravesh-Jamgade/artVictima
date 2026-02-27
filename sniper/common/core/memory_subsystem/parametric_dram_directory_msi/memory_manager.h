@@ -170,6 +170,7 @@ namespace ParametricDramDirectoryMSI
          UInt32 pwc_L4_assoc,pwc_L4_size;
          UInt32 pwc_L3_assoc,pwc_L3_size;
          UInt32 pwc_L2_assoc,pwc_L2_size;
+         bool pwc_L4_dis, pwc_L3_dis, pwc_L2_dis;
          PageTableBuffer *ptb;
          bool m_ptb_enabled;
          UInt32 ptb_size;
@@ -329,6 +330,7 @@ namespace ParametricDramDirectoryMSI
          void incrElapsedTime(SubsecondTime latency, ShmemPerfModel::Thread_t thread_num = ShmemPerfModel::NUM_CORE_THREADS);
          void incrElapsedTime(MemComponent::component_t mem_component, CachePerfModel::CacheAccess_t access_type, ShmemPerfModel::Thread_t thread_num = ShmemPerfModel::NUM_CORE_THREADS);
          
+         PrL1PrL2DramDirectoryMSI::DramDirectoryCntlr* getDramDirectoryCntlr(){ return m_dram_directory_cntlr; }
 
          struct features{
 

@@ -101,6 +101,7 @@ namespace PrL1PrL2DramDirectoryMSI
          case INV_REP:
          case DRAM_READ_REQ:
          case DRAM_SPECIAL_READ_REQ: // direct lane
+         case PTW_NUCA_PREFETCH_REQ: // direct lane
             // msg_type + address
             // msg_type - 1 byte
             return (1 + sizeof(IntPtr));
@@ -111,6 +112,7 @@ namespace PrL1PrL2DramDirectoryMSI
          case WB_REP:
          case DRAM_WRITE_REQ:
          case DRAM_READ_REP:
+         case PTW_NUCA_PREFETCH_REP: // direct lane
             // msg_type + address + cache_block
             return (1 + sizeof(IntPtr) + m_data_length);
 

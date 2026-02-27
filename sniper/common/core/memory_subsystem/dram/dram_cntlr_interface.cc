@@ -50,6 +50,27 @@ void DramCntlrInterface::handleMsgFromTagDirectory(core_id_t sender, PrL1PrL2Dra
          HitWhere::where_t hit_where;
          boost::tie(dram_latency, hit_where) = getDataFromDram(address, shmem_msg->getRequester(), data_buf, msg_time, shmem_msg->getPerf(), false, shmem_msg->getBlockType());
          getShmemPerfModel()->incrElapsedTime(dram_latency, ShmemPerfModel::_SIM_THREAD);
+        
+         break;
+      }
+
+      case PrL1PrL2DramDirectoryMSI::ShmemMsg::msg_t::PTW_NUCA_PREFETCH_REQ:
+      {
+         // std::cout << "Received DRAM_SPECIAL_READ_REQ for address: " << std::hex << shmem_msg->getAddress() << std::dec << " from sender: " << sender  << " sim: " << msg_time.getNS() << " ns, usr: " << usr_time.getNS() << " ns" << std::endl;
+         IntPtr address = shmem_msg->getAddress();
+         Byte data_buf[getCacheBlockSize()];
+         SubsecondTime dram_latency;
+         HitWhere::where_t hit_where;
+         boost::tie(dram_latency, hit_where) = getDataFromDram(address, shmem_msg->getRequester(), data_buf, msg_time, shmem_msg->getPerf(), false, shmem_msg->getBlockType());
+         getShmemPerfModel()->incrElapsedTime(dram_latency, ShmemPerfModel::_SIM_THREAD);
+         
+         getMemoryManager()->sendMsg(PrL1PrL2DramDirectoryMSI::ShmemMsg::PTW_NUCA_PREFETCH_REP,
+            MemComponent::DRAM, MemComponent::TAG_DIR,
+            shmem_msg->getRequester() /* requester */,
+            sender /* receiver */,
+            address,
+            data_buf, getCacheBlockSize(),
+            hit_where, shmem_msg->getPerf(), ShmemPerfModel::_SIM_THREAD,shmem_msg->getBlockType());
          break;
       }
 

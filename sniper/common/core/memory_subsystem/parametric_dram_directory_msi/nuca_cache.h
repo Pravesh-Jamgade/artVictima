@@ -47,7 +47,7 @@ class NucaCache
       void markTranslationMetadata(IntPtr address, CacheBlockInfo::block_type_t blocktype);
       Cache* getCache(){return m_cache;}
       void measureStats();
-
+      bool freelookup(IntPtr address);
       bool isPerfect(){return perfect;}
 };
 

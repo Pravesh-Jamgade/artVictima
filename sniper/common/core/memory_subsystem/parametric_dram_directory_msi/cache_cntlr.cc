@@ -62,7 +62,6 @@ char * BlockTypeString(CacheBlockInfo::block_type_t block_type) {
       case CacheBlockInfo::block_type_t::TLB_ENTRY_PASSTHROUGH:   return "tlb_entry_passthrough";
       case CacheBlockInfo::block_type_t::PAGE_TABLE_PASSTHROUGH:  return "page_table_passthrough";
       case CacheBlockInfo::block_type_t::PREFETCH_PAGE_TABLE:  return "prefetch_page_table";
-      case CacheBlockInfo::block_type_t::NUCA_PREFETCH_PAGE_TABLE:  return "nuca_prefetch_page_table";
 
       default:                            return "??";
    }
@@ -965,10 +964,10 @@ CacheCntlr::processMemOpFromCore(
       }
    }
 
-   {
-      SubsecondTime curr_now = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
-      std::cout << "Hit Where, " << std::hex << ca_address << std::dec << ", block_type, " << block_type << ", where, " << hit_where << ", " << curr_now.getNS() << '\n';
-   }   
+   // {
+   //    SubsecondTime curr_now = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
+   //    std::cout << "Hit Where, " << std::hex << ca_address << std::dec << ", block_type, " << block_type << ", where, " << hit_where << ", " << curr_now.getNS() << '\n';
+   // }   
    return hit_where;
 }
 
@@ -1633,7 +1632,6 @@ CacheCntlr::initiateDirectoryAccess(Core::mem_op_t mem_op_type, IntPtr address, 
          LOG_PRINT_ERROR("Unsupported Mem Op Type(%u)", mem_op_type);
    }
 
-   bool special_lane_packet = (block_type == CacheBlockInfo::block_type_t::PREFETCH_PAGE_TABLE || block_type == CacheBlockInfo::block_type_t::NUCA_PREFETCH_PAGE_TABLE);
    bool first = false;
    {
       // // Should not be our special prefetch packet
@@ -1671,7 +1669,7 @@ CacheCntlr::initiateDirectoryAccess(Core::mem_op_t mem_op_type, IntPtr address, 
       }
       else
       {
-         std::cout << "Shared, addr, " << std::hex << address << std::dec << ", block_type, " << block_type << '\n';
+         // std::cout << "Shared, addr, " << std::hex << address << std::dec << ", block_type, " << block_type << '\n';
          processShReqToDirectory(address,block_type);
       }
    }
@@ -1725,13 +1723,8 @@ void
 CacheCntlr::processShReqToDirectory(IntPtr address,CacheBlockInfo::block_type_t block_type)
 {
 MYLOG("SH REQ @ %lx", address);
-
-   bool special_lane = (block_type == CacheBlockInfo::block_type_t::PREFETCH_PAGE_TABLE);
-   PrL1PrL2DramDirectoryMSI::ShmemMsg::msg_t shmem_msg;
-   shmem_msg = special_lane ? PrL1PrL2DramDirectoryMSI::ShmemMsg::DRAM_SPECIAL_READ_REQ: PrL1PrL2DramDirectoryMSI::ShmemMsg::SH_REQ;
-
    //std::cout<<"Send Message from address: "<<std::hex<<address<<" processShReqToDirectory\n";
-   getMemoryManager()->sendMsg(shmem_msg,
+   getMemoryManager()->sendMsg(PrL1PrL2DramDirectoryMSI::ShmemMsg::SH_REQ,
          MemComponent::LAST_LEVEL_CACHE, MemComponent::TAG_DIR,
          m_core_id_master /* requester */,
          getHome(address) /* receiver */,
@@ -1887,13 +1880,13 @@ CacheCntlr::insertCacheBlock(IntPtr address, CacheState::cstate_t cstate, Byte* 
 
    // std::cout << "Inserting " << getCache()->getName() << " address:" << std::hex << address << std::dec << " sim: " << getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD).getNS() << " ns, usr: " << getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD).getNS() << " ns" << std::endl;
    
-   if(block_type == CacheBlockInfo::block_type_t::PAGE_TABLE ||
-      block_type == CacheBlockInfo::block_type_t::PREFETCH_PAGE_TABLE ||
-      block_type == CacheBlockInfo::block_type_t::NUCA_PREFETCH_PAGE_TABLE 
-   ){
-      SubsecondTime curr_now = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
-      std::cout << "Track Insert, " << getCache()->getName() << ", addr, " << std::hex << address << std::dec << ", block_type, " << block_type << ", " << curr_now.getNS() << '\n';
-   }
+   // if(block_type == CacheBlockInfo::block_type_t::PAGE_TABLE ||
+   //    block_type == CacheBlockInfo::block_type_t::PREFETCH_PAGE_TABLE ||
+   //    block_type == CacheBlockInfo::block_type_t::NUCA_PREFETCH_PAGE_TABLE 
+   // ){
+   //    SubsecondTime curr_now = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
+   //    std::cout << "Track Insert, " << getCache()->getName() << ", addr, " << std::hex << address << std::dec << ", block_type, " << block_type << ", " << curr_now.getNS() << '\n';
+   // }
    MYLOG("insertCacheBlock at %s l%d @ %lx as %c (now %c)", getCache()->getName().c_str(), m_mem_component, address, CStateString(cstate), CStateString(getCacheState(address)));
    //std::cout << "Inserting cache block at cache: " << getCache()->getName() << " with address:" << address << " with type: " << block_type << std::endl;
    bool metadata_request = (block_type == CacheBlockInfo::block_type_t::PAGE_TABLE) || 
@@ -2365,10 +2358,10 @@ MYLOG("WB REQ<%u @ %lx", sender, address);
          CacheDirectoryWaiter* request = m_master->m_directory_waiters.front(address);
          getLock().release();
 
-         bool async_prefetch_waiter =
-            request->isPrefetch &&
-            (request->block_type == CacheBlockInfo::block_type_t::PREFETCH_PAGE_TABLE ||
-             request->block_type == CacheBlockInfo::block_type_t::NUCA_PREFETCH_PAGE_TABLE);
+         // bool async_prefetch_waiter =
+         //    request->isPrefetch &&
+         //    (request->block_type == CacheBlockInfo::block_type_t::PREFETCH_PAGE_TABLE ||
+         //     request->block_type == CacheBlockInfo::block_type_t::NUCA_PREFETCH_PAGE_TABLE);
 
          request->cache_cntlr->m_shmem_perf->updateTime(getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD), ShmemPerf::PENDING_HIT);
 
@@ -2402,14 +2395,14 @@ MYLOG("adjusting time in #%u from %lu to %lu", request->cache_cntlr->m_core_id, 
 MYLOG("wakeup user #%u", request->cache_cntlr->m_core_id);
          request->cache_cntlr->updateUncoreStatistics(shmem_msg->getWhere(), t_here);
 
-         if (!async_prefetch_waiter)
-         {
+         // if (!async_prefetch_waiter)
+         // {
             // releaseStackLock(address);
             // Pass stack lock through to user thread
             wakeUpUserThread(request->cache_cntlr->m_user_thread_sem);
             waitForUserThread(request->cache_cntlr->m_network_thread_sem);
             acquireStackLock(address);
-         }
+         // }
          if(request->block_type == CacheBlockInfo::block_type_t::NON_PAGE_TABLE)
          {
             ScopedLock sl(request->cache_cntlr->getLock());

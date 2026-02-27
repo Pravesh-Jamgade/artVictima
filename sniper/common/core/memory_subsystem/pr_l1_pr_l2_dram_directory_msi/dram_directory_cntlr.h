@@ -85,6 +85,8 @@ namespace PrL1PrL2DramDirectoryMSI
 
          void handleMsgFromL2Cache(core_id_t sender, ShmemMsg* shmem_msg);
          void handleMsgFromDRAM(core_id_t sender, ShmemMsg* shmem_msg);
+         void handlePtwPrefetch(IntPtr address, CacheBlockInfo::block_type_t block_type);
+
 
          DramDirectoryCache* getDramDirectoryCache() { return m_dram_directory_cache; }
    };

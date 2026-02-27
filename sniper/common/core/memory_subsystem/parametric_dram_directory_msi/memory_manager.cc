@@ -253,19 +253,22 @@
 
                pwc_L4_size  = Sim()->getCfg()->getInt("perf_model/ptw/pwc/l4_size");
                pwc_L4_assoc  = Sim()->getCfg()->getInt("perf_model/ptw/pwc/l4_assoc");
+               pwc_L4_dis  = Sim()->getCfg()->getBool("perf_model/ptw/pwc/l4_disable");
          
                pwc_L3_size  = Sim()->getCfg()->getInt("perf_model/ptw/pwc/l3_size");
                pwc_L3_assoc  = Sim()->getCfg()->getInt("perf_model/ptw/pwc/l3_assoc");
+               pwc_L3_dis  = Sim()->getCfg()->getBool("perf_model/ptw/pwc/l3_disable");
 
                pwc_L2_size  = Sim()->getCfg()->getInt("perf_model/ptw/pwc/l2_size");
                pwc_L2_assoc  = Sim()->getCfg()->getInt("perf_model/ptw/pwc/l2_assoc");
+               pwc_L2_dis  = Sim()->getCfg()->getBool("perf_model/ptw/pwc/l2_disable");
 
                bool pwc_perfect =  Sim()->getCfg()->getBool("perf_model/ptw/pwc/perfect");
 
                pwc_access_latency  = ComponentLatency(core->getDvfsDomain(), Sim()->getCfg()->getInt("perf_model/ptw/pwc/access_penalty"));
                pwc_miss_latency  = ComponentLatency(core->getDvfsDomain(), Sim()->getCfg()->getInt("perf_model/ptw/pwc/miss_penalty"));
 
-               pwc  = new PWC("pwc", "perf_model/ptw/pwc", getCore()->getId(),pwc_L4_assoc,pwc_L4_size,pwc_L3_assoc,pwc_L3_size,pwc_L2_assoc,pwc_L2_size, pwc_access_latency, pwc_miss_latency, pwc_perfect);
+               pwc  = new PWC("pwc", "perf_model/ptw/pwc", getCore()->getId(),pwc_L4_assoc,pwc_L4_size,pwc_L3_assoc,pwc_L3_size,pwc_L2_assoc,pwc_L2_size, pwc_access_latency, pwc_miss_latency, pwc_perfect, pwc_L4_dis, pwc_L3_dis, pwc_L2_dis);
             }
 
             m_ptb_enabled = Sim()->getCfg()->getBoolDefault("perf_model/ptb/enabled", false);
@@ -1414,6 +1417,13 @@
                switch(sender_mem_component)
                {
                   case MemComponent::TAG_DIR:
+                  {
+                     DramCntlrInterface* dram_interface = m_dram_cache ? (DramCntlrInterface*)m_dram_cache : (DramCntlrInterface*)m_dram_cntlr;
+                     dram_interface->handleMsgFromTagDirectory(sender, shmem_msg);
+                     break;
+                  }
+
+                  case MemComponent::NUCA_CACHE:
                   {
                      DramCntlrInterface* dram_interface = m_dram_cache ? (DramCntlrInterface*)m_dram_cache : (DramCntlrInterface*)m_dram_cntlr;
                      dram_interface->handleMsgFromTagDirectory(sender, shmem_msg);

@@ -37,6 +37,8 @@ namespace PrL1PrL2DramDirectoryMSI
             // DRAM > tag directory
             DRAM_READ_REP,
             DRAM_SPECIAL_READ_REQ, // direct lane
+            PTW_NUCA_PREFETCH_REQ,
+            PTW_NUCA_PREFETCH_REP,
 
             MAX_MSG_TYPE = NULLIFY_REQ,
             NUM_MSG_TYPES = MAX_MSG_TYPE - MIN_MSG_TYPE + 1

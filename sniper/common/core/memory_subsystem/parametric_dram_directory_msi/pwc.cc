@@ -16,14 +16,16 @@ namespace ParametricDramDirectoryMSI
   IntPtr PWC::SIM_PAGE_MASK;
 
          
-  PWC::PWC(String name, String cfgname, core_id_t core_id, UInt32 L4_associativity, UInt32 L4_num_entries, UInt32 L3_associativity, UInt32 L3_num_entries, UInt32 L2_associativity, UInt32 L2_num_entries, ComponentLatency _access_latency, ComponentLatency _miss_latency, bool _perfect)
+  PWC::PWC(String name, String cfgname, core_id_t core_id, UInt32 L4_associativity, UInt32 L4_num_entries, UInt32 L3_associativity, 
+    UInt32 L3_num_entries, UInt32 L2_associativity, UInt32 L2_num_entries, ComponentLatency _access_latency, 
+    ComponentLatency _miss_latency, bool _perfect, bool pwc_l4_dis, bool pwc_l3_dis, bool pwc_l2_dis)
     : m_core_id(core_id)
     , access_latency(_access_latency)
     , miss_latency(_miss_latency)
     , m_L4_cache(name + "_L4", cfgname, core_id, L4_num_entries / L4_associativity, L4_associativity, 8, "lru", CacheBase::PR_L1_CACHE) // Assuming 8B granularity
     , m_L3_cache(name + "_L3", cfgname, core_id, L3_num_entries / L3_associativity, L3_associativity, 8, "lru", CacheBase::PR_L1_CACHE)
     , m_L2_cache(name + "_L2", cfgname, core_id, L2_num_entries / L2_associativity, L2_associativity, 8, "lru", CacheBase::PR_L1_CACHE)  
-    , perfect(_perfect)
+    , perfect(_perfect), l4_dis(pwc_l4_dis), l3_dis(pwc_l3_dis), l2_dis(pwc_l2_dis)
   {
 
     registerStatsMetric(name+"_L4", core_id, "access", &m_l4_access);
@@ -46,6 +48,7 @@ namespace ParametricDramDirectoryMSI
     switch(level){
 
       case 1:{
+          if(l4_dis) return PWC::MISS;
           hit = m_L4_cache.accessSingleLine(address, Cache::LOAD, NULL, 0, now, true);
           if(count) m_l4_access++;
           if (hit) return PWC::HIT;
@@ -60,6 +63,7 @@ namespace ParametricDramDirectoryMSI
       }
 
       case 2: {
+          if(l3_dis) return PWC::MISS;
           hit = m_L3_cache.accessSingleLine(address, Cache::LOAD, NULL, 0, now, true);
           if(count) m_l3_access++;
           if (hit) return PWC::HIT;
@@ -73,6 +77,7 @@ namespace ParametricDramDirectoryMSI
       }
       case 3: 
       {
+          if(l2_dis) return PWC::MISS;
           hit = m_L2_cache.accessSingleLine(address, Cache::LOAD, NULL, 0, now, true);
           if(count) m_l2_access++;
           if (hit) return PWC::HIT;

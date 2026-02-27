@@ -99,6 +99,46 @@ DramDirectoryCntlr::~DramDirectoryCntlr()
    delete m_dram_directory_req_queue_list;
 }
 
+void DramDirectoryCntlr::handlePtwPrefetch(IntPtr address, CacheBlockInfo::block_type_t block_type)
+{
+    // 1) If NUCA already has it, do nothing
+    if (m_nuca_cache && m_nuca_cache->freelookup(address))  // if you don't have contains(), add it or approximate
+        return;
+    // 2) If already inflight (queue non-empty), do nothing
+    if (m_dram_directory_req_queue_list->size(address) > 0)
+        return;
+   
+    SubsecondTime t = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD);
+
+    ShmemMsg* msg = new ShmemMsg(
+        ShmemMsg::msg_t::PTW_NUCA_PREFETCH_REQ,
+        MemComponent::TAG_DIR, MemComponent::DRAM,
+        m_core_id /* requester can be core_id or PTW's core */,
+        address,
+        NULL, 0,
+        &m_dummy_shmem_perf,
+        block_type
+    );
+
+    ShmemReq* req = new ShmemReq(msg, t);
+    req->setWaitForData(true);
+
+    m_dram_directory_req_queue_list->enqueue(address, req);
+
+    core_id_t dram_node = m_dram_controller_home_lookup->getHome(address);
+
+    getMemoryManager()->sendMsg(ShmemMsg::PTW_NUCA_PREFETCH_REQ,
+        MemComponent::NUCA_CACHE, MemComponent::DRAM,
+        m_core_id /* requester */,
+        dram_node /* receiver */,
+        address,
+        NULL, 0,
+        HitWhere::UNKNOWN,
+        &m_dummy_shmem_perf,
+        ShmemPerfModel::_SIM_THREAD,
+        block_type);
+}
+
 void
 DramDirectoryCntlr::handleMsgFromL2Cache(core_id_t sender, ShmemMsg* shmem_msg)
 {
@@ -205,6 +245,27 @@ DramDirectoryCntlr::handleMsgFromDRAM(core_id_t sender, ShmemMsg* shmem_msg)
 {
    MYLOG("Start");
    ShmemMsg::msg_t shmem_msg_type = shmem_msg->getMsgType();
+
+   IntPtr address = shmem_msg->getAddress();
+   
+   if (shmem_msg_type == ShmemMsg::msg_t::PTW_NUCA_PREFETCH_REP)
+   {
+      ShmemReq* shmem_req = m_dram_directory_req_queue_list->front(address);
+      bool flag = shmem_req->getShmemMsg()->getMsgType() == ShmemMsg::PTW_NUCA_PREFETCH_REQ;
+
+      // fill NUCA only
+      sendDataToNUCA(
+         address,
+         m_core_id,
+         shmem_msg->getDataBuf(),
+         getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD),
+         false,
+         shmem_req->getBlockType()
+      );
+
+      processNextReqFromL2Cache(address);
+      return;
+   }
 
    switch (shmem_msg_type)
    {
@@ -501,7 +562,7 @@ DramDirectoryCntlr::processShReqFromL2Cache(ShmemReq* shmem_req, Byte* cached_da
    IntPtr address = shmem_req->getShmemMsg()->getAddress();
    core_id_t requester = shmem_req->getShmemMsg()->getRequester();
 
-   std::cout << "Track Start processShReqFromL2Cache, addr, " << std::hex << address << std::dec << ", block_type, " << shmem_req->getBlockType() << '\n';
+   // std::cout << "Track Start processShReqFromL2Cache, addr, " << std::hex << address << std::dec << ", block_type, " << shmem_req->getBlockType() << '\n';
 
    MYLOG("Start @ %lx", address);
    updateShmemPerf(shmem_req);
@@ -581,7 +642,7 @@ DramDirectoryCntlr::processShReqFromL2Cache(ShmemReq* shmem_req, Byte* cached_da
             }
             else
             {
-               std::cout << "Track Shared:processShReqFromL2Cache, addr, " << std::hex << address << std::dec << ", block_type, " << shmem_req->getBlockType() << '\n';
+               // std::cout << "Track Shared:processShReqFromL2Cache, addr, " << std::hex << address << std::dec << ", block_type, " << shmem_req->getBlockType() << '\n';
 
                MYLOG("SHARED state, retrieve data and send")
                retrieveDataAndSendToL2Cache(ShmemMsg::SH_REP, requester, address, cached_data_buf, shmem_req->getShmemMsg());
@@ -592,7 +653,7 @@ DramDirectoryCntlr::processShReqFromL2Cache(ShmemReq* shmem_req, Byte* cached_da
 
       case DirectoryState::UNCACHED:
       {
-         std::cout << "Track Uncached:processShReqFromL2Cache, addr, " << std::hex << address << std::dec << ", block_type, " << shmem_req->getBlockType() << '\n';
+         // std::cout << "Track Uncached:processShReqFromL2Cache, addr, " << std::hex << address << std::dec << ", block_type, " << shmem_req->getBlockType() << '\n';
 
          MYLOG("was UNCACHED, is now EXCLUSIVE")
          // Modifiy the directory entry contents
@@ -656,7 +717,7 @@ DramDirectoryCntlr::retrieveDataAndSendToL2Cache(ShmemMsg::msg_t reply_msg_type,
    {
       if (m_nuca_cache)
       {
-         std::cout << "Track if_nuca, addr, " << std::hex << address << std::dec << " type, " << orig_shmem_msg->getBlockType() << '\n';
+         // std::cout << "Track if_nuca, addr, " << std::hex << address << std::dec << " type, " << orig_shmem_msg->getBlockType() << '\n';
 
          SubsecondTime nuca_latency;
          HitWhere::where_t hit_where;
@@ -667,7 +728,7 @@ DramDirectoryCntlr::retrieveDataAndSendToL2Cache(ShmemMsg::msg_t reply_msg_type,
 
          if (hit_where != HitWhere::MISS)
          {
-            std::cout << "Track nuca_miss, addr, " << std::hex << address << std::dec << " type, " << orig_shmem_msg->getBlockType() << '\n';
+            // std::cout << "Track nuca_miss, addr, " << std::hex << address << std::dec << " type, " << orig_shmem_msg->getBlockType() << '\n';
 
             getMemoryManager()->sendMsg(reply_msg_type,
                   MemComponent::TAG_DIR, MemComponent::L2_CACHE,
@@ -762,7 +823,7 @@ DramDirectoryCntlr::processDRAMReply(core_id_t sender, ShmemMsg* shmem_msg)
 
    updateShmemPerf(shmem_req, ShmemPerf::TD_ACCESS);
 
-   std::cout << "Track process_dram_reply, addr, " << std::hex << address << std::dec << ", type, " << shmem_msg->getBlockType() << '\n';
+   // std::cout << "Track process_dram_reply, addr, " << std::hex << address << std::dec << ", type, " << shmem_msg->getBlockType() << '\n';
 
    switch(shmem_req->getShmemMsg()->getMsgType())
    {
@@ -1240,7 +1301,7 @@ DramDirectoryCntlr::sendDataToNUCA(IntPtr address, core_id_t requester, Byte* da
 {
    if (m_nuca_cache)
    {
-      std::cout << "Track write_nuca, addr, " << std::hex << address << std::dec << ", block_type, " << block_type << '\n';
+      // std::cout << "Track write_nuca, addr, " << std::hex << address << std::dec << ", block_type, " << block_type << '\n';
       bool eviction;
       IntPtr evict_address;
       Byte evict_buf[getCacheBlockSize()];
@@ -1250,6 +1311,9 @@ DramDirectoryCntlr::sendDataToNUCA(IntPtr address, core_id_t requester, Byte* da
          getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD),
          count,block_type
       );
+
+      // if(block_type == CacheBlockInfo::block_type_t::PAGE_TABLE)
+      // std::cout << "Nuca write, addr, " << std::hex << address << std::dec << '\n';
 
       if (eviction)
       {
@@ -1279,7 +1343,8 @@ DramDirectoryCntlr::sendDataToDram(IntPtr address, core_id_t requester, Byte* da
    if (m_nuca_cache)
    {
       // If we have a NUCA cache: write it there, it will be written to DRAM on eviction
-
+      if(block_type == CacheBlockInfo::block_type_t::PAGE_TABLE)
+      std::cout << "NucaWrite addr, " << std::hex << address << std::dec  << "\n"; 
       sendDataToNUCA(address, requester, data_buf, now, true, block_type);
    }
    else

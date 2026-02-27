@@ -65,6 +65,12 @@ NucaCache::~NucaCache()
       delete m_queue_model;
 }
 
+// found->true
+bool NucaCache::freelookup(IntPtr address){
+   CacheBlockInfo* block = m_cache->peekSingleLine(address);
+   return block != nullptr;
+}
+
 boost::tuple<SubsecondTime, HitWhere::where_t>
 NucaCache::read(IntPtr address, Byte* data_buf, SubsecondTime now, ShmemPerf *perf, bool count,bool is_metadata)
 {

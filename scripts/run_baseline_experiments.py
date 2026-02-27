@@ -23,6 +23,8 @@ TRACES = [
 ]
 
 MULTICORE_WORKLOAD = {
+    "16": [["cc.sift", "dlrm.sift", "gc.sift", "rnd.sift", "bfs.sift", "sssp.sift", "gen.sift", "pr.sift", "cc.sift", "dlrm.sift", "gc.sift", "rnd.sift", "bfs.sift", "sssp.sift", "gen.sift", "pr.sift"],
+            ["cc.sift", "dlrm.sift", "gc.sift", "rnd.sift", "cc.sift", "dlrm.sift", "gc.sift", "rnd.sift", "cc.sift", "dlrm.sift", "gc.sift", "rnd.sift", "cc.sift", "dlrm.sift", "gc.sift", "rnd.sift"]],
     "8": [["cc.sift", "dlrm.sift", "gc.sift", "rnd.sift", "bfs.sift", "sssp.sift", "gen.sift", "pr.sift"]],
     "4": [["cc.sift", "dlrm.sift", "gc.sift", "rnd.sift"], ["bfs.sift", "sssp.sift", "gen.sift", "pr.sift"]],
     "2": [["cc.sift", "rnd.sift"], ["dlrm.sift", "rnd.sift"], ["gc.sift", "rnd.sift"], ["bfs.sift", "rnd.sift"]]
@@ -105,6 +107,11 @@ EXPERIMENT_CONFIGS = {
     "vikram_ptb_256": {
         "config": "/app/sniper/config/virtual_memory_configs/vikram_ptb_256.cfg",
         "label": "vikram_ptb_256",
+    },
+
+    "radix_NoPwc":{
+        "config": "/app/sniper/config/virtual_memory_configs/radix_NoPwc.cfg",
+        "label": "radix_NoPwc",
     },
 
     ##################################################
@@ -257,6 +264,49 @@ MULTI_CORE_EXPERIMENT_CONFIGS = {
         "config": "/app/sniper/config/virtual_memory_configs/8core_tempo.cfg",
         "label": "8core_tempo",
     },
+
+   ###################################################################
+    # 16 core Experiments
+    ###################################################################
+
+     "16core_baseline": {
+        "config": "/app/sniper/config/virtual_memory_configs/16core_radix.cfg",
+        "label": "16core_baseline",
+    },
+
+    "16core_perfect": {
+        "config": "/app/sniper/config/virtual_memory_configs/16core_perfecttlb.cfg",
+        "label": "16core_perfect",
+    },
+    
+    "16core_vikram_both": {
+        "config": "/app/sniper/config/virtual_memory_configs/16core_vikram_both.cfg",
+        "label": "16core_vikram_both",
+    },
+    "16core_vikram_ptb": {
+        "config": "/app/sniper/config/virtual_memory_configs/16core_vikram_ptb.cfg",
+        "label": "16core_vikram_ptb",
+    },
+
+    "16core_victima": {
+        "config": "/app/sniper/config/virtual_memory_configs/16core_victima.cfg",
+        "label": "16core_victima",
+    },
+
+    "16core_utopia": {
+        "config": "/app/sniper/config/virtual_memory_configs/16core_utopia.cfg",
+        "label": "16core_utopia",
+    },
+
+    "16core_potm": {
+        "config": "/app/sniper/config/virtual_memory_configs/16core_potm.cfg",
+        "label": "16core_potm",
+    },
+
+    "16core_tempo": {
+        "config": "/app/sniper/config/virtual_memory_configs/16core_tempo.cfg",
+        "label": "16core_tempo",
+    },
 }
 
 # "baseline": {
@@ -396,6 +446,7 @@ def csv_choices(value_string):
         "vikram_ptb_64",
         "vikram_ptb_128",
         "vikram_ptb_256",
+        "radix_NoPwc"
         
     ]
 
@@ -457,9 +508,7 @@ def resolve_experiments(args: argparse.Namespace) -> List[Tuple[str, str]]:
 def resolve_multi_core_experiments(args: argparse.Namespace) -> List[Tuple[str, str, str]]:
     resolved = []
     keys = parse_string_experiments(args.experiment)
-    print(keys)
     for key in keys:
-       
         for config_name, config_info in MULTI_CORE_EXPERIMENT_CONFIGS.items():
             if key not in config_name:
                 continue
@@ -467,7 +516,7 @@ def resolve_multi_core_experiments(args: argparse.Namespace) -> List[Tuple[str, 
             label = f"{config_info['label']}"
             config_path = args.config or config_info["config"]
             resolved.append((cores, label, config_path))
-        return resolved
+    return resolved
 
 def q(value):
     return f'\"{value}\"'
@@ -512,53 +561,58 @@ def build_commands(args: argparse.Namespace) -> List[Tuple[str, str]]:
                     + '"'
                 )
             else:
-                command = f"{base_command} > {output_dir}.out 2> {output_dir}.err"
+                command = f"{base_command}"
 
             commands.append((command, job_label))
 
-    # multicore_jobs = resolve_multi_core_experiments(args)
-    # if not multicore_jobs:
-    #     return commands
-    # for cores, experiment_label, config_path in multicore_jobs:
-    #     experiment_root = Path(args.results_dir) / f"{cores}core" / experiment_label
-    #     experiment_root.mkdir(parents=True, exist_ok=True)
-    #     trace_group = MULTICORE_WORKLOAD[cores]
+    multicore_jobs = resolve_multi_core_experiments(args)
+    if not multicore_jobs:
+        return commands
+    for cores, experiment_label, config_path in multicore_jobs:
+        ################ change #########
+        if cores != "16":
+            continue
 
-    #     for trace_list in trace_group:
-    #         trace_name = "_".join([t.split(".")[0] for t in trace_list])
-    #         output_dir = experiment_root / trace_name
-    #         os.makedirs(output_dir, exist_ok=True)
+        experiment_root = Path(args.results_dir) / f"{cores}core" / experiment_label
+        experiment_root.mkdir(parents=True, exist_ok=True)
+        print(cores, experiment_label, config_path)
+        trace_group = MULTICORE_WORKLOAD[cores]
 
-    #         trace_command = f"--traces={','.join([os.path.join(args.traces_dir, t) for t in trace_list])}"
-    #         output_command = f"-d /app/{output_dir}"
-    #         config_command = f"-c {config_path}"
-    #         job_label = f"{experiment_label}_{trace_name}"
+        for trace_list in trace_group:
+            trace_name = "_".join([t.split(".")[0] for t in trace_list])
+            output_dir = experiment_root / trace_name
+            os.makedirs(output_dir, exist_ok=True)
 
-    #         base_command = (
-    #             f"{docker_prefix} {SNIPER_COMMAND} "
-    #             f"{output_command} {config_command} {trace_command}"
-    #         )
+            trace_command = f"--traces={','.join([os.path.join(args.traces_dir, t) for t in trace_list])}"
+            output_command = f"-d /app/{output_dir}"
+            config_command = f"-c {config_path}"
+            job_label = f"{experiment_label}_{trace_name}"
 
-    #         if args.mode == "slurm":
-    #             slurm_directives = [
-    #                 "sbatch",
-    #                 f"-J {job_label}",
-    #                 f"--output={output_dir}.out",
-    #                 f"--error={output_dir}.err",
-    #             ]
-    #             if args.excluded_nodes:
-    #                 slurm_directives.insert(1, f"--exclude={args.excluded_nodes}")
+            base_command = (
+                f"{docker_prefix} {SNIPER_COMMAND} "
+                f"{output_command} {config_command} {trace_command}"
+            )
 
-    #             command = (
-    #                 " ".join(slurm_directives)
-    #                 + ' docker_wrapper.sh "'
-    #                 + base_command
-    #                 + '"'
-    #             )
-    #         else:
-    #             command = f"{base_command} > {output_dir}.out 2> {output_dir}.err"
+            if args.mode == "slurm":
+                slurm_directives = [
+                    "sbatch",
+                    f"-J {job_label}",
+                    f"--output={output_dir}.out",
+                    f"--error={output_dir}.err",
+                ]
+                if args.excluded_nodes:
+                    slurm_directives.insert(1, f"--exclude={args.excluded_nodes}")
 
-    #         commands.append((command, job_label))
+                command = (
+                    " ".join(slurm_directives)
+                    + ' docker_wrapper.sh "'
+                    + base_command
+                    + '"'
+                )
+            else:
+                command = f"{base_command}"
+
+            commands.append((command, job_label))
 
     return commands
 

@@ -28,6 +28,8 @@ namespace ParametricDramDirectoryMSI
     core_id_t m_core_id;
     bool perfect;
 
+    bool l4_dis, l3_dis, l2_dis;
+
   public:
 
     enum where_t
@@ -39,7 +41,9 @@ namespace ParametricDramDirectoryMSI
     ComponentLatency access_latency;
     ComponentLatency miss_latency;
 
-    PWC(String name, String cfgname, core_id_t core_id, UInt32 L1_num_entries, UInt32 L1_associativity, UInt32 L2_num_entries, UInt32 L2_associativity, UInt32 L3_num_entries, UInt32 L3_associativity, ComponentLatency access_latency, ComponentLatency miss_latency, bool perfect);
+    PWC(String name, String cfgname, core_id_t core_id, UInt32 L1_num_entries, UInt32 L1_associativity, UInt32 L2_num_entries, 
+        UInt32 L2_associativity, UInt32 L3_num_entries, UInt32 L3_associativity, ComponentLatency access_latency, 
+        ComponentLatency miss_latency, bool perfect, bool pwc_l4_dis, bool pwc_l3_dis, bool pwc_l2_dis);
     PWC::where_t lookup(IntPtr address, SubsecondTime now, bool allocate_on_miss , int level , bool count);
     PWC::where_t probe(IntPtr address, int level);
     void allocate(IntPtr address, SubsecondTime now, Cache *pwc_cache);
