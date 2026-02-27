@@ -101,44 +101,48 @@ DramDirectoryCntlr::~DramDirectoryCntlr()
 
 void DramDirectoryCntlr::handlePtwPrefetch(IntPtr address, CacheBlockInfo::block_type_t block_type)
 {
-    // 1) If NUCA already has it, do nothing
-    if (m_nuca_cache && m_nuca_cache->freelookup(address))  // if you don't have contains(), add it or approximate
-        return;
-    // 2) If already inflight (queue non-empty), do nothing
-    if (m_dram_directory_req_queue_list->size(address) > 0)
-        return;
-   
-    SubsecondTime t = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD);
+   ShmemMsg::msg_t msg_type = (block_type == CacheBlockInfo::block_type_t::PREFETCH_PAGE_TABLE) ? ShmemMsg::msg_t::DRAM_SPECIAL_READ_REQ : ShmemMsg::msg_t::PTW_NUCA_PREFETCH_REQ;
 
-    ShmemMsg::msg_t msg_type = (block_type == CacheBlockInfo::block_type_t::PREFETCH_PAGE_TABLE) ? ShmemMsg::msg_t::DRAM_SPECIAL_READ_REQ : ShmemMsg::msg_t::PTW_NUCA_PREFETCH_REQ;
+   bool check_directory = (block_type != CacheBlockInfo::block_type_t::PREFETCH_PAGE_TABLE); 
+   SubsecondTime t = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD);
 
-    ShmemMsg* msg = new ShmemMsg(
-        msg_type,
-        MemComponent::TAG_DIR, MemComponent::DRAM,
-        m_core_id /* requester can be core_id or PTW's core */,
-        address,
-        NULL, 0,
-        &m_dummy_shmem_perf,
-        block_type
-    );
+   if(check_directory)
+   {
+      // 1) If NUCA already has it, do nothing
+      if (m_nuca_cache && m_nuca_cache->freelookup(address))  // if you don't have contains(), add it or approximate
+         return;
+      // 2) If already inflight (queue non-empty), do nothing
+      if (m_dram_directory_req_queue_list->size(address) > 0)
+         return;
 
-    ShmemReq* req = new ShmemReq(msg, t);
-    req->setWaitForData(true);
+      ShmemMsg* msg = new ShmemMsg(
+         msg_type,
+         MemComponent::TAG_DIR, MemComponent::DRAM,
+         m_core_id /* requester can be core_id or PTW's core */,
+         address,
+         NULL, 0,
+         &m_dummy_shmem_perf,
+         block_type
+      );
 
-    m_dram_directory_req_queue_list->enqueue(address, req);
+      ShmemReq* req = new ShmemReq(msg, t);
+      req->setWaitForData(true);
 
-    core_id_t dram_node = m_dram_controller_home_lookup->getHome(address);
+      m_dram_directory_req_queue_list->enqueue(address, req);
+   }
 
-    getMemoryManager()->sendMsg(msg_type,
-        MemComponent::TAG_DIR, MemComponent::DRAM,
-        m_core_id /* requester */,
-        dram_node /* receiver */,
-        address,
-        NULL, 0,
-        HitWhere::UNKNOWN,
-        &m_dummy_shmem_perf,
-        ShmemPerfModel::_SIM_THREAD,
-        block_type);
+   core_id_t dram_node = m_dram_controller_home_lookup->getHome(address);
+    
+   getMemoryManager()->sendMsg(msg_type,
+      MemComponent::TAG_DIR, MemComponent::DRAM,
+      m_core_id /* requester */,
+      dram_node /* receiver */,
+      address,
+      NULL, 0,
+      HitWhere::UNKNOWN,
+      &m_dummy_shmem_perf,
+      ShmemPerfModel::_SIM_THREAD,
+      block_type);
 }
 
 void

@@ -635,7 +635,7 @@ namespace ParametricDramDirectoryMSI{
                             if(found_in_dram)
                             {
                                 // std::cout << "Special Access Address: 0x" << std::hex << cache_address << ", 0x" << leaf_address << std::dec << " not found in cache, issuing early DRAM request\n";
-                                // mem_manager->getDramCntlr()->setPTWChainEntry(cache_address, leaf_address);
+                                mem_manager->getDramCntlr()->setPTWChainEntry(cache_address, leaf_address);
 
                                 SubsecondTime timer_start_pde = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
                             
