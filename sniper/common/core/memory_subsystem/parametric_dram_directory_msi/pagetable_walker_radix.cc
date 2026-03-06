@@ -635,11 +635,11 @@ namespace ParametricDramDirectoryMSI{
                             if(found_in_dram)
                             {
                                 // std::cout << "Special Access Address: 0x" << std::hex << cache_address << ", 0x" << leaf_address << std::dec << " not found in cache, issuing early DRAM request\n";
-                                mem_manager->getDramCntlr()->setPTWChainEntry(cache_address, leaf_address);
+                                // mem_manager->getDramCntlr()->setPTWChainEntry(cache_address, leaf_address);
 
                                 SubsecondTime timer_start_pde = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
-                            
-                                mem_manager->getDramDirectoryCntlr()->handlePtwPrefetch(leaf_address, CacheBlockInfo::block_type_t::PREFETCH_PAGE_TABLE);
+                                CacheCntlr* i_just_need_cache_contoller = mem_manager->getLastLevelCacheController();
+                                i_just_need_cache_contoller->initiateDirectoryAccessNoWait(cache_address, CacheBlockInfo::block_type_t::PREFETCH_PAGE_TABLE);
 
                                 // std::cout << "BeforeReset PTW " << level << " address 0x" << std::hex << cache_address 
                                 //           << " at time " << std::dec << getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD).getNS() << " ns\n";
@@ -727,21 +727,29 @@ namespace ParametricDramDirectoryMSI{
                 CacheCntlr* prefetch_cache = cache;
                 if(mem_manager){
                     switch (pd_hit_where){
-                        // case HitWhere::L1_OWN:
-                        //     prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::L1_DCACHE);
-                        //     break;
+                        case HitWhere::L1_OWN:
+                            prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::L1_DCACHE);
+                            break;
                         case HitWhere::L2_OWN:
                             prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::L2_CACHE);
                             break;
-                        case HitWhere::NUCA_CACHE:
                         case HitWhere::CACHE_REMOTE:
                         case HitWhere::DRAM:
                         case HitWhere::DRAM_LOCAL:
                         case HitWhere::DRAM_REMOTE:
                         case HitWhere::DRAM_CACHE:
-                            prefetch_cache = mem_manager->getLastLevelCacheController();
                             need_nuca_cache_access = true;
                             break;
+
+                        /*  Only L2 will do early-fetch: even for dram hits, we will early-fetch when we return to L2 */
+                        // case HitWhere::L2_OWN:
+                        // case HitWhere::CACHE_REMOTE:
+                        // case HitWhere::DRAM:
+                        // case HitWhere::DRAM_LOCAL:
+                        // case HitWhere::DRAM_REMOTE:
+                        // case HitWhere::DRAM_CACHE:
+                        //     prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::L2_CACHE);
+                        //     break;
                     }
                 }
 

@@ -1350,7 +1350,7 @@ DramDirectoryCntlr::sendDataToDram(IntPtr address, core_id_t requester, Byte* da
    {
       // If we have a NUCA cache: write it there, it will be written to DRAM on eviction
       if(block_type == CacheBlockInfo::block_type_t::PAGE_TABLE)
-      std::cout << "NucaWrite addr, " << std::hex << address << std::dec  << "\n"; 
+      // std::cout << "NucaWrite addr, " << std::hex << address << std::dec  << "\n"; 
       sendDataToNUCA(address, requester, data_buf, now, true, block_type);
    }
    else

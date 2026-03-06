@@ -23,12 +23,45 @@ TRACES = [
 ]
 
 MULTICORE_WORKLOAD = {
-    "16": [["cc.sift", "dlrm.sift", "gc.sift", "rnd.sift", "bfs.sift", "sssp.sift", "gen.sift", "pr.sift", "cc.sift", "dlrm.sift", "gc.sift", "rnd.sift", "bfs.sift", "sssp.sift", "gen.sift", "pr.sift"],
-            ["cc.sift", "dlrm.sift", "gc.sift", "rnd.sift", "cc.sift", "dlrm.sift", "gc.sift", "rnd.sift", "cc.sift", "dlrm.sift", "gc.sift", "rnd.sift", "cc.sift", "dlrm.sift", "gc.sift", "rnd.sift"]],
-    "8": [["cc.sift", "dlrm.sift", "gc.sift", "rnd.sift", "bfs.sift", "sssp.sift", "gen.sift", "pr.sift"]],
-    "4": [["cc.sift", "dlrm.sift", "gc.sift", "rnd.sift"], ["bfs.sift", "sssp.sift", "gen.sift", "pr.sift"]],
-    "2": [["cc.sift", "rnd.sift"], ["dlrm.sift", "rnd.sift"], ["gc.sift", "rnd.sift"], ["bfs.sift", "rnd.sift"]]
+  "16": [
+    ["cc.sift", "bfs.sift", "dlrm.sift", "rnd.sift", "sssp.sift", "gen.sift", "gc.sift", "pr.sift",
+     "cc.sift", "bfs.sift", "dlrm.sift", "rnd.sift", "sssp.sift", "gen.sift", "gc.sift", "pr.sift"],
+
+    ["cc.sift", "cc.sift", "bfs.sift", "bfs.sift", "sssp.sift", "sssp.sift", "gen.sift", "gen.sift",
+     "gc.sift", "gc.sift", "pr.sift", "pr.sift", "xs.sift", "xs.sift", "bc.sift", "bc.sift"],
+
+    ["dlrm.sift", "dlrm.sift", "dlrm.sift", "rnd.sift", "rnd.sift", "rnd.sift",
+     "cc.sift", "cc.sift", "bfs.sift", "bfs.sift",
+     "sssp.sift", "sssp.sift", "gen.sift", "gen.sift",
+     "pr.sift", "xs.sift"],
+
+    ["cc.sift", "bfs.sift", "dlrm.sift", "rnd.sift", "sssp.sift", "gen.sift", "gc.sift", "pr.sift",
+     "xs.sift", "bc.sift", "tc.sift",
+     "cc.sift", "bfs.sift", "dlrm.sift", "rnd.sift", "sssp.sift"]
+  ],
+
+  "8": [
+    ["cc.sift", "bfs.sift", "dlrm.sift", "rnd.sift", "sssp.sift", "gen.sift", "gc.sift", "pr.sift"],
+    ["cc.sift", "bfs.sift", "dlrm.sift", "rnd.sift", "sssp.sift", "gen.sift", "xs.sift", "bc.sift"],
+    ["cc.sift", "bfs.sift", "dlrm.sift", "sssp.sift", "gen.sift", "pr.sift", "xs.sift", "tc.sift"],
+    ["cc.sift", "rnd.sift", "gc.sift", "pr.sift", "xs.sift", "bc.sift", "tc.sift", "sssp.sift"]
+  ],
+
+  "4": [
+    ["cc.sift", "bfs.sift", "dlrm.sift", "rnd.sift"],
+    ["cc.sift", "sssp.sift", "gen.sift", "gc.sift"],
+    ["bfs.sift", "dlrm.sift", "pr.sift", "xs.sift"],
+    ["rnd.sift", "sssp.sift", "bc.sift", "tc.sift"]
+  ],
+
+  "2": [
+    ["cc.sift", "bfs.sift"],
+    ["dlrm.sift", "rnd.sift"],
+    ["sssp.sift", "gen.sift"],
+    ["gc.sift", "pr.sift"]
+  ]
 }
+
 
 DEFAULT_IMAGE = "docker.io/kanell21/artifact_evaluation:victima"
 SNIPER_COMMAND = "/app/sniper/run-sniper -s stop-by-icount:500000000 --genstats --power"
@@ -565,54 +598,54 @@ def build_commands(args: argparse.Namespace) -> List[Tuple[str, str]]:
 
             commands.append((command, job_label))
 
-    multicore_jobs = resolve_multi_core_experiments(args)
-    if not multicore_jobs:
-        return commands
-    for cores, experiment_label, config_path in multicore_jobs:
-        ################ change #########
-        if cores != "16":
-            continue
+    # multicore_jobs = resolve_multi_core_experiments(args)
+    # if not multicore_jobs:
+    #     return commands
+    # for cores, experiment_label, config_path in multicore_jobs:
+    #     ################ change #########
+    #     # if cores != "16":
+    #     #     continue
 
-        experiment_root = Path(args.results_dir) / f"{cores}core" / experiment_label
-        experiment_root.mkdir(parents=True, exist_ok=True)
-        print(cores, experiment_label, config_path)
-        trace_group = MULTICORE_WORKLOAD[cores]
+    #     experiment_root = Path(args.results_dir) / f"{cores}core" / experiment_label
+    #     experiment_root.mkdir(parents=True, exist_ok=True)
+    #     print(cores, experiment_label, config_path)
+    #     trace_group = MULTICORE_WORKLOAD[cores]
 
-        for trace_list in trace_group:
-            trace_name = "_".join([t.split(".")[0] for t in trace_list])
-            output_dir = experiment_root / trace_name
-            os.makedirs(output_dir, exist_ok=True)
+    #     for trace_list in trace_group:
+    #         trace_name = "_".join([t.split(".")[0] for t in trace_list])
+    #         output_dir = experiment_root / trace_name
+    #         os.makedirs(output_dir, exist_ok=True)
 
-            trace_command = f"--traces={','.join([os.path.join(args.traces_dir, t) for t in trace_list])}"
-            output_command = f"-d /app/{output_dir}"
-            config_command = f"-c {config_path}"
-            job_label = f"{experiment_label}_{trace_name}"
+    #         trace_command = f"--traces={','.join([os.path.join(args.traces_dir, t) for t in trace_list])}"
+    #         output_command = f"-d /app/{output_dir}"
+    #         config_command = f"-c {config_path}"
+    #         job_label = f"{experiment_label}_{trace_name}"
 
-            base_command = (
-                f"{docker_prefix} {SNIPER_COMMAND} "
-                f"{output_command} {config_command} {trace_command}"
-            )
+    #         base_command = (
+    #             f"{docker_prefix} {SNIPER_COMMAND} "
+    #             f"{output_command} {config_command} {trace_command}"
+    #         )
 
-            if args.mode == "slurm":
-                slurm_directives = [
-                    "sbatch",
-                    f"-J {job_label}",
-                    f"--output={output_dir}.out",
-                    f"--error={output_dir}.err",
-                ]
-                if args.excluded_nodes:
-                    slurm_directives.insert(1, f"--exclude={args.excluded_nodes}")
+    #         if args.mode == "slurm":
+    #             slurm_directives = [
+    #                 "sbatch",
+    #                 f"-J {job_label}",
+    #                 f"--output={output_dir}.out",
+    #                 f"--error={output_dir}.err",
+    #             ]
+    #             if args.excluded_nodes:
+    #                 slurm_directives.insert(1, f"--exclude={args.excluded_nodes}")
 
-                command = (
-                    " ".join(slurm_directives)
-                    + ' docker_wrapper.sh "'
-                    + base_command
-                    + '"'
-                )
-            else:
-                command = f"{base_command}"
+    #             command = (
+    #                 " ".join(slurm_directives)
+    #                 + ' docker_wrapper.sh "'
+    #                 + base_command
+    #                 + '"'
+    #             )
+    #         else:
+    #             command = f"{base_command}"
 
-            commands.append((command, job_label))
+    #         commands.append((command, job_label))
 
     return commands
 
