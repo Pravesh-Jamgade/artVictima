@@ -726,30 +726,63 @@ namespace ParametricDramDirectoryMSI{
                 bool need_nuca_cache_access = false;
                 CacheCntlr* prefetch_cache = cache;
                 if(mem_manager){
-                    switch (pd_hit_where){
-                        case HitWhere::L1_OWN:
+                    if(m_l1l2nuca_early)
+                    {
+                        switch (pd_hit_where){
+                            case HitWhere::L1_OWN:
+                                prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::L1_DCACHE);
+                                break;
+                            case HitWhere::L2_OWN:
+                                prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::L2_CACHE);
+                                break;
+                            case HitWhere::CACHE_REMOTE:
+                            case HitWhere::DRAM:
+                            case HitWhere::DRAM_LOCAL:
+                            case HitWhere::DRAM_REMOTE:
+                            case HitWhere::DRAM_CACHE:
+                                need_nuca_cache_access = true;
+                                break;
+                        }
+                    }
+                    else if(m_l1_early){
+                        switch (pd_hit_where){
+                            case HitWhere::L1_OWN:
                             prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::L1_DCACHE);
                             break;
-                        case HitWhere::L2_OWN:
+                        }
+                    }
+                    else if(m_l2_early){
+                        switch (pd_hit_where){
+                            case HitWhere::L2_OWN:
                             prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::L2_CACHE);
                             break;
-                        case HitWhere::CACHE_REMOTE:
-                        case HitWhere::DRAM:
-                        case HitWhere::DRAM_LOCAL:
-                        case HitWhere::DRAM_REMOTE:
-                        case HitWhere::DRAM_CACHE:
+                        }
+                    }
+                    else if(m_nuca_early){
+                        switch (pd_hit_where){
+                            case HitWhere::CACHE_REMOTE:
+                            case HitWhere::DRAM:
+                            case HitWhere::DRAM_LOCAL:
+                            case HitWhere::DRAM_REMOTE:
+                            case HitWhere::DRAM_CACHE:
                             need_nuca_cache_access = true;
                             break;
-
-                        /*  Only L2 will do early-fetch: even for dram hits, we will early-fetch when we return to L2 */
-                        // case HitWhere::L2_OWN:
-                        // case HitWhere::CACHE_REMOTE:
-                        // case HitWhere::DRAM:
-                        // case HitWhere::DRAM_LOCAL:
-                        // case HitWhere::DRAM_REMOTE:
-                        // case HitWhere::DRAM_CACHE:
-                        //     prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::L2_CACHE);
-                        //     break;
+                        }
+                    }
+                    else if(m_l2nuca_early)
+                    {
+                        switch (pd_hit_where){
+                            case HitWhere::L2_OWN:
+                                prefetch_cache = mem_manager->getCacheCntlrAt(core->getId(), MemComponent::L2_CACHE);
+                                break;
+                            case HitWhere::CACHE_REMOTE:
+                            case HitWhere::DRAM:
+                            case HitWhere::DRAM_LOCAL:
+                            case HitWhere::DRAM_REMOTE:
+                            case HitWhere::DRAM_CACHE:
+                                need_nuca_cache_access = true;
+                                break;
+                        }
                     }
                 }
 
