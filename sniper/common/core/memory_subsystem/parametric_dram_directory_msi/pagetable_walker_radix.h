@@ -91,6 +91,7 @@ namespace ParametricDramDirectoryMSI{
             UInt64 pd_prefetch_overlap_samples;
             bool early_fetch_enabled = false;
             bool m_special_datapath_enabled = false;
+            bool m_l1l2nuca_early, m_l1_early, m_l2_early, m_nuca_early, m_l2nuca_early;
             UInt64 rob_stall_stlb_miss_cycles;
             UInt64 psc_accesses;
             UInt64 psc_misses;

@@ -227,6 +227,13 @@ namespace ParametricDramDirectoryMSI{
         total_ptb_latency = SubsecondTime::Zero();
         early_fetch_enabled = Sim()->getCfg()->getBoolDefault("perf_model/ptb/early_fetch", false);
         m_special_datapath_enabled = Sim()->getCfg()->getBoolDefault("perf_model/ptb/special_datapath", false);
+
+        m_l1_early = Sim()->getCfg()->getBoolDefault("perf_model/ptb/l1_early", false);
+        m_l2_early = Sim()->getCfg()->getBoolDefault("perf_model/ptb/l2_early", false);
+        m_nuca_early = Sim()->getCfg()->getBoolDefault("perf_model/ptb/nuca_early", false);
+        m_l2nuca_early = Sim()->getCfg()->getBoolDefault("perf_model/ptb/l2nuca_early", false);
+        m_l1l2nuca_early = Sim()->getCfg()->getBoolDefault("perf_model/ptb/l1l2nuca_early", false);
+       
         overlap_samples = 0;
         overlap_ready = 0;
         overlap_ratio_sum_milli = 0;
