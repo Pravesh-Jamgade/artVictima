@@ -157,8 +157,9 @@ DramDirectoryCache::invalidateDirectoryEntry(IntPtr address)
       }
    }
 
-   // Should not reach here
-   LOG_PRINT_ERROR("");
+   // Duplicate invalidations may happen due to races in invalidation
+   // handling; ignore when the entry is already gone.
+   LOG_PRINT_WARNING_ONCE("Ignoring invalidateDirectoryEntry for missing address 0x%lx", address);
 }
 
 void
