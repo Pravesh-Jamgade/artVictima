@@ -10,6 +10,7 @@
 #include "mem_component.h"
 #include "memory_manager_base.h"
 #include "coherency_protocol.h"
+#include <unordered_set>
 
 class NucaCache;
 
@@ -18,6 +19,11 @@ namespace PrL1PrL2DramDirectoryMSI
    class DramDirectoryCntlr
    {
       private:
+
+      std::unordered_set<IntPtr> m_ptw_prefetch_inflight;
+      std::unordered_set<IntPtr> m_ptw_prefetch_ready;
+      Lock m_ptw_prefetch_lock;
+
          // Functional Models
          MemoryManagerBase* m_memory_manager;
          AddressHomeLookup* m_dram_controller_home_lookup;

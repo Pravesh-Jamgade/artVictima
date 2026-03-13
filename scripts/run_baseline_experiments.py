@@ -89,6 +89,7 @@ BASE_EXPERIMENTS: Dict[str, str] = {
     "vb_l3": "vb_l3",
     "vb_l2l3": "vb_l2l3",
     "vb_l1l2l3": "vb_l1l2l3",
+    "athena": "athena",
 }
 
 VIRTUAL_EXPERIMENTS: Dict[str, str] = {
@@ -101,21 +102,22 @@ VIRTUAL_EXPERIMENTS: Dict[str, str] = {
 }
 
 MULTICORE_BASE_EXPERIMENTS: Dict[str, str] = {
-    "baseline": "radix",
-    "perfect": "perfecttlb",
-    "vikram_both": "vikram_both",
-    "vikram_fetch": "vikram_fetch",
-    "vikram_ptb": "vikram_ptb",
-    "victima": "victima",
-    "utopia": "utopia",
-    "potm": "potm",
-    "tempo": "tempo",
+    # "baseline": "radix",
+    # "perfect": "perfecttlb",
+    # "vikram_both": "vikram_both",
+    # "vikram_fetch": "vikram_fetch",
+    # "vikram_ptb": "vikram_ptb",
+    # "victima": "victima",
+    # "utopia": "utopia",
+    # "potm": "potm",
+    # "tempo": "tempo",
     
-    "vb_l1": "vb_l1",
-    "vb_l2": "vb_l2",
-    "vb_l3": "vb_l3",
+    # "vb_l1": "vb_l1",
+    # "vb_l2": "vb_l2",
+    # "vb_l3": "vb_l3",
     "vb_l2l3": "vb_l2l3",
-    "vb_l1l2l3": "vb_l1l2l3",
+    # "vb_l1l2l3": "vb_l1l2l3",
+    "athena": "athena",
 }
 
 def build_single_core_configs() -> Dict[str, Dict[str, str]]:
