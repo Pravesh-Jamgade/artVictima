@@ -4,131 +4,135 @@ import io
 import numpy as np
 from scipy.stats import gmean
 
-# # --- 1. DATA PREPARATION ---
-# raw_baseline = """design_workload,level,L1,L2,dram-local,nuca-cache
-# baseline_dlrm,4,2189826,12350822,20728525,768
-# baseline_pr,4,2702603,5549293,10633617,4
-# baseline_cc,4,2675507,15488556,24288377,43
-# baseline_sssp,4,4123327,4371368,23858657,105
-# baseline_gc,4,1549703,11165852,18251653,3689
-# baseline_tc,4,176828,447408,2731411,12
-# baseline_xs,4,346201,3727245,3294724,864
-# baseline_rnd,4,215186,17416633,17891271,41
-# baseline_bfs,4,2188342,12399134,20828102,272
-# baseline_bc,4,772413,608496,4118553,266
-# baseline_gen,4,1553932,11163925,18270438,4298"""
+# --- 1. DATA PREPARATION ---
+raw_baseline = """design_workload level L2 L3 DRAM
+baseline_dlrm 4 14872993 201 20420450
+baseline_pr 4 8181440 25 10704048
+baseline_cc 4 18030700 571 24400849
+baseline_tc 4 631510 6 2724143
+baseline_xs 4 4111298 1046 3256781
+baseline_rnd 4 17742147 35439 17747453
+baseline_bfs 4 14892138 343 20531507
+baseline_bc 4 1370648 519 4128564"""
 
-# raw_vikram = """design_workload,level,L1,L2,dram-local,nuca-cache
-# vikram_both_dlrm,4,13137537,19036258,3101751,1694
-# vikram_both_pr,4,7313909,8798762,2772662,199
-# vikram_both_cc,4,15727318,23234895,3569146,1389
-# vikram_both_sssp,4,8019491,7643060,16605694,434
-# vikram_both_gc,4,7979371,16501233,6530667,2722
-# vikram_both_tc,4,1191115,1922419,242101,24
-# vikram_both_xs,4,1955387,3136741,2276131,768
-# vikram_both_rnd,4,25228927,9042389,1251376,9
-# vikram_both_bfs,4,13319781,19017637,3091646,1444
-# vikram_both_bc,4,1702193,913768,2883485,274
-# vikram_both_gen,4,8005693,16510387,6496190,2767"""
+raw_vikram = """design_workload level L2 L3 DRAM
+vikram_dlrm 4 31992926 1344862 2141972
+vikram_pr 4 15988235 73281 2824019
+vikram_cc 4 38755202 1286307 2361649
+vikram_tc 4 2993780 7741 354138
+vikram_xs 4 5125738 97406 2145950
+vikram_rnd 4 34491583 2642 1029607
+vikram_bfs 4 31528912 1346565 2056240
+vikram_bc 4 2451968 1338595 1709164"""
 
-raw_baseline = """design_workload,level,L2,dram-local,nuca-cache
-baseline_dlrm,4,14797023,20478910,257
-baseline_pr,4,8240681,10644822,6
-baseline_cc,4,18028712,24413651,470
-baseline_sssp,4,9036483,23438764,341
-baseline_gc,4,12801359,18192042,4093
-baseline_tc,4,625314,2730342,3
-baseline_xs,4,4104527,3263579,1047
-baseline_rnd,4,17674208,17850890,53
-baseline_bfs,4,14633049,20668601,942
-baseline_bc,4,1359913,4139281,522
-baseline_gen,4,12806792,18202802,4018"""
-
-raw_vikram = """design_workload,level,L2,dram-local,nuca-cache
-vikram_both_dlrm,4,31347218,3631253,3267
-vikram_both_pr,4,15878466,3006930,133
-vikram_both_cc,4,38498277,3893568,2125
-vikram_both_sssp,4,16284442,16095415,1388
-vikram_both_gc,4,24463448,6526145,2519
-vikram_both_tc,4,2994548,361024,87
-vikram_both_xs,4,5125651,2241568,1924
-vikram_both_rnd,4,34490750,1030441,2615
-vikram_both_bfs,4,31853058,3583630,2320
-vikram_both_bc,4,2475011,3024138,571
-vikram_both_gen,4,24449276,6553960,2655"""
-
-cols = ['L2', 'dram-local', 'nuca-cache']
+cols = ['L2', 'L3', 'DRAM']
 
 def get_processed_df(raw_str, design_name):
-    df = pd.read_csv(io.StringIO(raw_str)).fillna(0)
+    # Be defensive: skip malformed/non-tabular lines (e.g., simulator *ERROR* log lines)
+    # instead of failing with a parser traceback.
+    df = pd.read_csv(
+        io.StringIO(raw_str),
+        sep=r'\s+',
+        engine='python',
+        on_bad_lines='skip'
+    )
+
+    required = {'design_workload', *cols}
+    missing = required.difference(df.columns)
+    if missing:
+        raise ValueError(
+            f"Input for {design_name} is missing required columns: {sorted(missing)}. "
+            "Check that the input contains a clean whitespace-separated table with "
+            "header: design_workload level L2 L3 DRAM."
+        )
+
+    # Ensure we only keep valid rows
+    df = df[df['design_workload'].astype(str).str.contains('_', na=False)].copy()
+    df[cols] = df[cols].apply(pd.to_numeric, errors='coerce')
+    df = df.dropna(subset=cols)
+
+    if df.empty:
+        raise ValueError(f"No valid rows found for {design_name} after filtering malformed input lines.")
+
     df['Workload'] = df['design_workload'].str.split('_').str[-1]
     df[cols] = df[cols].div(df[cols].sum(axis=1), axis=0) * 100
+    
+    # Geomean Calculation
     subset = df[cols].replace(0, 1e-9)
     gm = gmean(subset, axis=0)
     gm_norm = (gm / np.sum(gm)) * 100
-    res = df.set_index(['Workload', 'design_workload'])[cols]
+    
+    res = df.set_index(['Workload', 'design_workload'])[cols].sort_index()
     res.loc[('Geomean', 'Geomean_' + design_name), :] = gm_norm
     return res
 
 df_b = get_processed_df(raw_baseline, 'Baseline')
 df_v = get_processed_df(raw_vikram, 'Vikram')
-final_df = pd.concat([df_b, df_v]).sort_index()
+
+# Reorder to ensure Geomean is last
+final_df = pd.concat([df_b, df_v])
+workloads = [w for w in final_df.index.get_level_values(0).unique() if w != 'Geomean'] + ['Geomean']
+final_df = final_df.reindex(workloads, level=0)
+
+# --- PRINT SUMMARY ---
+print("\n--- GEOMEAN SUMMARY (%) ---")
+print(final_df.xs('Geomean', level=0).round(2))
 
 # --- 2. PLOTTING ---
-plt.rcParams.update({'font.size': 20}) # Global font increase
-fig, ax = plt.subplots(figsize=(20, 7)) 
+plt.rcParams.update({'font.size': 16})
+fig, ax = plt.subplots(figsize=(18, 8))
 
-# Colors and 6 Hatches
-colors = ['#4C72B0', '#55A868', '#C44E52', '#8172B3', '#DD8452']
-hatches = ['', '//', '..', 'xx', '\\\\', '--']
+colors = ['#4C72B0', '#55A868', '#C44E52']
+hatches = ['', '//', '..']
 
-final_df.plot(kind='bar', stacked=True, ax=ax, width=0.85, edgecolor='black', zorder=3, color=colors)
+final_df.plot(kind='bar', stacked=True, ax=ax, width=0.85, edgecolor='black', color=colors, zorder=3)
 
-# ... (rest of your data processing code) ...
+# Legend Formatting
+handles, labels = ax.get_legend_handles_labels()
+new_labels = ["L2 Hit", "L3 Hit", "DRAM Hit"]
+leg = ax.legend(handles, new_labels, loc='upper center', bbox_to_anchor=(0.5, 1.12), ncol=3, frameon=False, fontsize=18)
 
-# --- 2. PLOTTING ---
-plt.rcParams.update({'font.size': 20}) 
-fig, ax = plt.subplots(figsize=(22, 8)) # Increased size for clarity
+for i, patch in enumerate(leg.get_patches()):
+    patch.set_hatch(hatches[i])
 
-# Plot
-final_df.plot(kind='bar', stacked=True, ax=ax, width=0.85, edgecolor='black', zorder=3, color=colors)
-
-# 1. REMOVE THE INDEX NAMES ('Workload', 'design_workload')
-ax.set_xlabel('') 
-ax.set_xticklabels([]) 
-
-
-# Apply patterns
 for i, container in enumerate(ax.containers):
     for patch in container:
         patch.set_hatch(hatches[i])
 
-ax.set_xticklabels([]) 
-
-# Add Large Centered Labels
-workloads = final_df.index.get_level_values(0).unique()
-for i, wl in enumerate(workloads):
-    pos = i * 2 + 0.5 
-    # Workload names
-    ax.text(pos, -8, wl, ha='center', va='top', fontsize=20, fontweight='bold')
-    # B/V Indicators
-    ax.text(i * 2, -2, 'B', ha='center', va='top', fontsize=16)
-    ax.text(i * 2 + 1, -2, 'V', ha='center', va='top', fontsize=16)
-
-# Visual Grouping
-for i in range(1, len(workloads)):
-    ax.axvline(x=i*2 - 0.5, color='black', linestyle='-', linewidth=1.5, alpha=0.3, zorder=1)
-
-# Large Formatting
-ax.set_ylabel('Fraction of Hits (%)', fontsize=22, fontweight='bold')
-ax.tick_params(axis='y', labelsize=20)
+# --- X-AXIS LABELING FIX ---
+ax.set_xlabel('')
+ax.set_xticklabels([])
+ax.set_ylabel('Fraction of Hits (%)', fontsize=20, fontweight='bold')
 ax.set_ylim(0, 100)
 
-# Large Legend
-handles, labels = ax.get_legend_handles_labels()
-ax.legend(handles=handles, labels=["L2 Hit", "DRAM Hit", "NUCA Hit"],
-          loc='lower center', bbox_to_anchor=(0.5, 1.05), 
-          ncol=4, fontsize=20, frameon=False)
+for i, wl in enumerate(workloads):
+    pos_center = i * 2 + 0.5
+    # Main Workload Label
+    ax.text(pos_center, -12, wl.upper(), ha='center', va='top', fontweight='bold', fontsize=14)
+    # B/V Sub-labels
+    ax.text(i * 2, -3, 'B', ha='center', va='top', fontsize=12, alpha=0.7)
+    ax.text(i * 2 + 1, -3, 'V', ha='center', va='top', fontsize=12, alpha=0.7)
+
+    if i < len(workloads) - 1:
+        ax.axvline(x=i * 2 + 1.5, color='black', alpha=0.1, lw=1)
+
+# --- RELATIVE IMPROVEMENT CALCULATION ---
+gm_summary = final_df.xs('Geomean', level=0)
+b_gm = gm_summary.iloc[0] # Baseline Geomean
+v_gm = gm_summary.iloc[1] # Vikram Geomean
+
+print("\n--- RELATIVE ANALYSIS (VIKRAM vs BASELINE) ---")
+# 1. Fold increase in L2 Hit Rate
+l2_improvement = v_gm['L2'] / b_gm['L2']
+print(f"L2 Hit Rate Increase: {l2_improvement:.2f}x")
+
+# 2. Reduction in DRAM traffic (Lower is better)
+dram_reduction = (b_gm['DRAM'] - v_gm['DRAM']) / b_gm['DRAM'] * 100
+print(f"DRAM Traffic Reduction: {dram_reduction:.2f}%")
+
+# 3. L3 Utilization Factor
+l3_factor = v_gm['L3'] / b_gm['L3']
+print(f"L3 Utilization Increase: {l3_factor:.2f}x")
 
 plt.grid(axis='y', linestyle='--', alpha=0.5, zorder=0)
 plt.tight_layout()
