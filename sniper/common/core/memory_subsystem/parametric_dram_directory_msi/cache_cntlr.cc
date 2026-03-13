@@ -149,15 +149,35 @@ void CacheCntlr::initiateDirectoryAccessNoWait(
       // Use a dummy ShmemPerf pointer so no core gets time-adjusted later.
       m_dummy_shmem_perf.reset(SubsecondTime::Zero(), INVALID_CORE_ID);
       // std::cout <<  "Sending message address 0x" << std::hex << address << " sim: " << std::dec << getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD).getNS() << " ns usr: " << std::dec << getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD).getNS() << " ns\n";
-      getMemoryManager()->sendMsg(
-            PrL1PrL2DramDirectoryMSI::ShmemMsg::DRAM_SPECIAL_READ_REQ,  // new msg
-            MemComponent::DRAM, MemComponent::DRAM,
-            m_core_id_master, getHome(address), address,
-            NULL, 0, HitWhere::UNKNOWN,
-            &m_dummy_shmem_perf,
-            ShmemPerfModel::_SIM_THREAD,
-            block_type
-      );
+      
+      if(CacheBlockInfo::block_type_t::PREFETCH_PAGE_TABLE == block_type) {
+         getMemoryManager()->sendMsg(
+               PrL1PrL2DramDirectoryMSI::ShmemMsg::DRAM_SPECIAL_READ_REQ,  // new msg
+               MemComponent::DRAM, MemComponent::DRAM,
+               m_core_id_master, getHome(address), address,
+               NULL, 0, HitWhere::UNKNOWN,
+               &m_dummy_shmem_perf,
+               ShmemPerfModel::_SIM_THREAD,
+               block_type
+         );
+         return;
+      }
+
+      if(CacheBlockInfo::block_type_t::PAGE_TABLE == block_type) {
+         getMemoryManager()->sendMsg(
+               PrL1PrL2DramDirectoryMSI::ShmemMsg::PTW_NUCA_PREFETCH_REQ,  // new msg
+               MemComponent::LAST_LEVEL_CACHE, MemComponent::TAG_DIR,
+               m_core_id_master, getHome(address), address,
+               NULL, 0, HitWhere::UNKNOWN,
+               &m_dummy_shmem_perf,
+               ShmemPerfModel::_SIM_THREAD,
+               block_type
+         );
+         return;
+      }  
+
+      std::cout << "InitiateDirectoryAccessNoWait: Unexpected block type " << BlockTypeString(block_type) << " for address 0x" << std::hex << address << std::dec << std::endl;
+      exit(0);
 }
 
 void CacheCntlr::initiateNucaCacheAccess(IntPtr address, CacheBlockInfo::block_type_t block_type){
