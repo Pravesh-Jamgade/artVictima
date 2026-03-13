@@ -34,7 +34,7 @@ def parse_jobs(jobfile: Path) -> List[Dict[str, str]]:
     return jobs
 
 
-STATUS_FILE = "job_status.log"
+STATUS_FILE = "job_status_2.log"
 
 def log_status(message: str):
     """Writes a timestamped message to the shared status file."""

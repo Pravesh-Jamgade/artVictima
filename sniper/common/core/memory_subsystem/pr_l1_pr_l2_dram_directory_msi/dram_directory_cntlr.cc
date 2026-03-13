@@ -101,48 +101,65 @@ DramDirectoryCntlr::~DramDirectoryCntlr()
 
 void DramDirectoryCntlr::handlePtwPrefetch(IntPtr address, CacheBlockInfo::block_type_t block_type)
 {
-   ShmemMsg::msg_t msg_type = (block_type == CacheBlockInfo::block_type_t::PREFETCH_PAGE_TABLE) ? ShmemMsg::msg_t::DRAM_SPECIAL_READ_REQ : ShmemMsg::msg_t::PTW_NUCA_PREFETCH_REQ;
+   const bool is_special_ptw = (block_type == CacheBlockInfo::block_type_t::PREFETCH_PAGE_TABLE);
+   const ShmemMsg::msg_t msg_type =
+      is_special_ptw ? ShmemMsg::DRAM_SPECIAL_READ_REQ
+                     : ShmemMsg::PTW_NUCA_PREFETCH_REQ;
 
-   bool check_directory = (block_type != CacheBlockInfo::block_type_t::PREFETCH_PAGE_TABLE); 
-   SubsecondTime t = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD);
+   SubsecondTime now = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD);
 
-   if(check_directory)
+   // Fast dedup: already resident
+   if (m_nuca_cache && m_nuca_cache->freelookup(address))
    {
-      // 1) If NUCA already has it, do nothing
-      if (m_nuca_cache && m_nuca_cache->freelookup(address))  // if you don't have contains(), add it or approximate
+      ScopedLock sl(m_ptw_prefetch_lock);
+      m_ptw_prefetch_ready.insert(address);
+      return;
+   }
+
+   // Async inflight dedup
+   {
+      ScopedLock sl(m_ptw_prefetch_lock);
+      if (m_ptw_prefetch_inflight.count(address) || m_ptw_prefetch_ready.count(address))
          return;
-      // 2) If already inflight (queue non-empty), do nothing
-      if (m_dram_directory_req_queue_list->size(address) > 0)
-         return;
+      m_ptw_prefetch_inflight.insert(address);
+   }
 
-      ShmemMsg* msg = new ShmemMsg(
-         msg_type,
-         MemComponent::TAG_DIR, MemComponent::DRAM,
-         m_core_id /* requester can be core_id or PTW's core */,
-         address,
-         NULL, 0,
-         &m_dummy_shmem_perf,
-         block_type
-      );
+   // Only tracked queue for the NUCA-prefetch path if you still want it
+   if (!is_special_ptw)
+   {
+      ScopedLock sl(m_ptw_prefetch_lock);
+      if (m_dram_directory_req_queue_list->size(address) == 0)
+      {
+         ShmemMsg* msg = new ShmemMsg(
+            msg_type,
+            MemComponent::TAG_DIR, MemComponent::DRAM,
+            m_core_id,
+            address,
+            NULL, 0,
+            &m_dummy_shmem_perf,
+            block_type
+         );
 
-      ShmemReq* req = new ShmemReq(msg, t);
-      req->setWaitForData(true);
-
-      m_dram_directory_req_queue_list->enqueue(address, req);
+         ShmemReq* req = new ShmemReq(msg, now);
+         req->setWaitForData(true);
+         m_dram_directory_req_queue_list->enqueue(address, req);
+      }
    }
 
    core_id_t dram_node = m_dram_controller_home_lookup->getHome(address);
-    
-   getMemoryManager()->sendMsg(msg_type,
+
+   getMemoryManager()->sendMsg(
+      msg_type,
       MemComponent::TAG_DIR, MemComponent::DRAM,
-      m_core_id /* requester */,
-      dram_node /* receiver */,
+      m_core_id,
+      dram_node,
       address,
       NULL, 0,
       HitWhere::UNKNOWN,
       &m_dummy_shmem_perf,
       ShmemPerfModel::_SIM_THREAD,
-      block_type);
+      block_type
+   );
 }
 
 void
@@ -251,25 +268,42 @@ DramDirectoryCntlr::handleMsgFromDRAM(core_id_t sender, ShmemMsg* shmem_msg)
 {
    MYLOG("Start");
    ShmemMsg::msg_t shmem_msg_type = shmem_msg->getMsgType();
-
    IntPtr address = shmem_msg->getAddress();
-   
-   if (shmem_msg_type == ShmemMsg::msg_t::PTW_NUCA_PREFETCH_REP)
-   {
-      ShmemReq* shmem_req = m_dram_directory_req_queue_list->front(address);
-      bool flag = shmem_req->getShmemMsg()->getMsgType() == ShmemMsg::PTW_NUCA_PREFETCH_REQ;
 
-      // fill NUCA only
+   const bool is_ptw_nuca_prefetch_rep =
+      (shmem_msg_type == ShmemMsg::PTW_NUCA_PREFETCH_REP);
+
+   if (is_ptw_nuca_prefetch_rep)
+   {
+      SubsecondTime now = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD);
+
+      // Fill NUCA or LLC-facing structure
       sendDataToNUCA(
          address,
          m_core_id,
          shmem_msg->getDataBuf(),
-         getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD),
+         now,
          false,
-         shmem_req->getBlockType()
+         shmem_msg->getBlockType()
       );
 
-      processNextReqFromL2Cache(address);
+      {
+         ScopedLock sl(m_ptw_prefetch_lock);
+         m_ptw_prefetch_inflight.erase(address);
+         m_ptw_prefetch_ready.insert(address);
+      }
+
+      // Only dequeue if this path was actually queued
+      if (m_dram_directory_req_queue_list->size(address) > 0)
+      {
+         ShmemReq* front = m_dram_directory_req_queue_list->front(address);
+         if (front &&
+             front->getShmemMsg()->getMsgType() == ShmemMsg::PTW_NUCA_PREFETCH_REQ)
+         {
+            processNextReqFromL2Cache(address);
+         }
+      }
+
       return;
    }
 

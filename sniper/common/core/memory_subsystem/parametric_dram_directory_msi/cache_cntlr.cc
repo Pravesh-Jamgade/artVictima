@@ -149,7 +149,6 @@ void CacheCntlr::initiateDirectoryAccessNoWait(
       // Use a dummy ShmemPerf pointer so no core gets time-adjusted later.
       m_dummy_shmem_perf.reset(SubsecondTime::Zero(), INVALID_CORE_ID);
       // std::cout <<  "Sending message address 0x" << std::hex << address << " sim: " << std::dec << getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD).getNS() << " ns usr: " << std::dec << getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD).getNS() << " ns\n";
-
       getMemoryManager()->sendMsg(
             PrL1PrL2DramDirectoryMSI::ShmemMsg::DRAM_SPECIAL_READ_REQ,  // new msg
             MemComponent::DRAM, MemComponent::DRAM,
