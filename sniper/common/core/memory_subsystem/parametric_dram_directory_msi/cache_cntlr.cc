@@ -164,6 +164,7 @@ void CacheCntlr::initiateDirectoryAccessNoWait(
       }
 
       if(CacheBlockInfo::block_type_t::PAGE_TABLE == block_type) {
+         // std::cout << std::hex << address << std::dec << " SendMsg\n";
          getMemoryManager()->sendMsg(
                PrL1PrL2DramDirectoryMSI::ShmemMsg::PTW_NUCA_PREFETCH_REQ,  // new msg
                MemComponent::LAST_LEVEL_CACHE, MemComponent::TAG_DIR,

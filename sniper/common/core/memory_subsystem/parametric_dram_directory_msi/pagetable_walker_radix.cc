@@ -805,7 +805,8 @@ namespace ParametricDramDirectoryMSI{
                     // std::cout << "Early-Fetch, addr, " << std::hex << leaf_address << ", " << std::dec << prefetch_time.getNS() << '\n'; 
                     //:initiateDirectoryAccess(Core::mem_op_t mem_op_type, IntPtr address, CacheBlockInfo::block_type_t block_type, bool isPrefetch, SubsecondTime t_issue)
                     // prefetch_cache->initiateDirectoryAccess(Core::READ, leaf_address, CacheBlockInfo::block_type_t::NUCA_PREFETCH_PAGE_TABLE, true, prefetch_time);
-                    mem_manager->getDramDirectoryCntlr()->handlePtwPrefetch(leaf_address, CacheBlockInfo::block_type_t::PAGE_TABLE);
+                    // mem_manager->getDramDirectoryCntlr()->handlePtwPrefetch(leaf_address, CacheBlockInfo::block_type_t::PAGE_TABLE);
+                    mem_manager->getCacheCntlrAt(core->getId(), MemComponent::L2_CACHE)->initiateDirectoryAccessNoWait(leaf_address, CacheBlockInfo::block_type_t::PAGE_TABLE);
                     SubsecondTime curr_now = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
                     // std::cout << "Out Early-Fetch, addr, " << std::hex << leaf_address << ", " << std::dec << curr_now.getNS() << '\n';
                     pushed = true;

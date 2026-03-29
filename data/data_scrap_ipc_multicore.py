@@ -7,7 +7,7 @@ from typing import List, Dict, Iterator
 
 # --- Regex Configuration ---
 # Set the number of values you want to capture here
-NUM_IPC_VALUES = 16 
+NUM_IPC_VALUES = 2
 pattern_parts = [r"([\d\.]+)"] * NUM_IPC_VALUES
 IPC_RE = re.compile(r"ipc\s*=\s*" + r",\s*".join(pattern_parts))
 

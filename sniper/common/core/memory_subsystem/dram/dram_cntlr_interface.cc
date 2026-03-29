@@ -56,7 +56,7 @@ void DramCntlrInterface::handleMsgFromTagDirectory(core_id_t sender, PrL1PrL2Dra
 
       case PrL1PrL2DramDirectoryMSI::ShmemMsg::msg_t::PTW_NUCA_PREFETCH_REQ:
       {
-         // std::cout << "Received DRAM_SPECIAL_READ_REQ for address: " << std::hex << shmem_msg->getAddress() << std::dec << " from sender: " << sender  << " sim: " << msg_time.getNS() << " ns, usr: " << usr_time.getNS() << " ns" << std::endl;
+         std::cout << "Received PTW_NUCA_PREFETCH_REQ for address: " << std::hex << shmem_msg->getAddress() << std::dec << " from sender: " << sender  << " sim: " << msg_time.getNS()  << std::endl;
          IntPtr address = shmem_msg->getAddress();
          Byte data_buf[getCacheBlockSize()];
          SubsecondTime dram_latency;

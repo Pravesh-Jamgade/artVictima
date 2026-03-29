@@ -168,6 +168,31 @@ DramDirectoryCntlr::handleMsgFromL2Cache(core_id_t sender, ShmemMsg* shmem_msg)
    ShmemMsg::msg_t shmem_msg_type = shmem_msg->getMsgType();
    SubsecondTime msg_time = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD);
    IntPtr address = shmem_msg->getAddress();
+
+   if(ShmemMsg::PTW_NUCA_PREFETCH_REQ == shmem_msg->getMsgType())
+   {
+      // std::cout << std::hex << shmem_msg->getAddress() << std::dec << " handleMsgFromL2\n";
+      ShmemReq* shmem_req = new ShmemReq(shmem_msg, msg_time);
+      IntPtr address = shmem_req->getShmemMsg()->getAddress();
+      core_id_t requester = shmem_req->getShmemMsg()->getRequester();
+      core_id_t dram_node = m_dram_controller_home_lookup->getHome(address);
+      MYLOG("ENqueued PTW_NUCA_PREFETCH_REQ for address %lx", address );
+      {
+         getMemoryManager()->sendMsg(PrL1PrL2DramDirectoryMSI::ShmemMsg::DRAM_READ_REQ,
+            MemComponent::TAG_DIR, MemComponent::DRAM,
+            requester /* requester */,
+            dram_node /* receiver */,
+            address,
+            NULL, 0,
+            HitWhere::UNKNOWN,
+            shmem_msg->getPerf(),
+            ShmemPerfModel::_SIM_THREAD, shmem_msg->getBlockType());
+         m_ptw_prefetch_inflight.insert(address);
+      }
+      MYLOG("done for %lx", address);
+      return;
+   }
+
    //std::cout<<shmem_msg->getBlockType()<<"\n";
    //std::cout<<"Handle Message From L2 Cache with Address: "<<address<<"\n";
    MYLOG("begin for address %lx, %d in queue", address, m_dram_directory_req_queue_list->size(address));
@@ -235,7 +260,7 @@ DramDirectoryCntlr::handleMsgFromL2Cache(core_id_t sender, ShmemMsg* shmem_msg)
          MYLOG("WB REP<%u @ %lx", sender, address);
          processWbRepFromL2Cache(sender, shmem_msg);
          break;
-
+      
       default:
          LOG_PRINT_ERROR("Unrecognized Shmem Msg Type: %u", shmem_msg_type);
          break;
@@ -270,13 +295,12 @@ DramDirectoryCntlr::handleMsgFromDRAM(core_id_t sender, ShmemMsg* shmem_msg)
    ShmemMsg::msg_t shmem_msg_type = shmem_msg->getMsgType();
    IntPtr address = shmem_msg->getAddress();
 
-   const bool is_ptw_nuca_prefetch_rep =
-      (shmem_msg_type == ShmemMsg::PTW_NUCA_PREFETCH_REP);
-
-   if (is_ptw_nuca_prefetch_rep)
+   bool special_ptw_prefetch = m_ptw_prefetch_inflight.find(address) != m_ptw_prefetch_inflight.end();
+   if (special_ptw_prefetch)
    {
       SubsecondTime now = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD);
 
+      // std::cout <<std::hex<<address<<std::dec<<" handleMsgFromDRAM\n";
       // Fill NUCA or LLC-facing structure
       sendDataToNUCA(
          address,
@@ -287,22 +311,7 @@ DramDirectoryCntlr::handleMsgFromDRAM(core_id_t sender, ShmemMsg* shmem_msg)
          shmem_msg->getBlockType()
       );
 
-      {
-         ScopedLock sl(m_ptw_prefetch_lock);
-         m_ptw_prefetch_inflight.erase(address);
-         m_ptw_prefetch_ready.insert(address);
-      }
-
-      // Only dequeue if this path was actually queued
-      if (m_dram_directory_req_queue_list->size(address) > 0)
-      {
-         ShmemReq* front = m_dram_directory_req_queue_list->front(address);
-         if (front &&
-             front->getShmemMsg()->getMsgType() == ShmemMsg::PTW_NUCA_PREFETCH_REQ)
-         {
-            processNextReqFromL2Cache(address);
-         }
-      }
+      m_ptw_prefetch_inflight.erase(address);
 
       return;
    }
@@ -359,6 +368,8 @@ DramDirectoryCntlr::processNextReqFromL2Cache(IntPtr address)
       else
          LOG_PRINT_ERROR("Unrecognized Request(%u)", shmem_req->getShmemMsg()->getMsgType());
    }
+
+   // std::cout <<std::hex<<address<<std::dec<<" completed, processNextReqFromL2Cache\n";
    MYLOG("End processNextReqFromL2Cache(%lx)", address);
 }
 
@@ -602,8 +613,6 @@ DramDirectoryCntlr::processShReqFromL2Cache(ShmemReq* shmem_req, Byte* cached_da
    IntPtr address = shmem_req->getShmemMsg()->getAddress();
    core_id_t requester = shmem_req->getShmemMsg()->getRequester();
 
-   // std::cout << "Track Start processShReqFromL2Cache, addr, " << std::hex << address << std::dec << ", block_type, " << shmem_req->getBlockType() << '\n';
-
    MYLOG("Start @ %lx", address);
    updateShmemPerf(shmem_req);
 
@@ -617,12 +626,15 @@ DramDirectoryCntlr::processShReqFromL2Cache(ShmemReq* shmem_req, Byte* cached_da
    DirectoryBlockInfo* directory_block_info = directory_entry->getDirectoryBlockInfo();
    DirectoryState::dstate_t curr_dstate = directory_block_info->getDState();
 
+   // std::cout << std::hex << address << std::dec << ", ds, " << curr_dstate << ", bt, " << shmem_req->getShmemMsg()->getMsgType() << ", req, " << requester  << " processShReqFromL2Cache\n";
+
    updateShmemPerf(shmem_req, ShmemPerf::TD_ACCESS);
 
    switch (curr_dstate)
    {
       case DirectoryState::EXCLUSIVE:
       {
+         // std::cout << "directory, " << requester << " ==? " << directory_entry->getOwner() << ", " << std::hex<< directory_entry->getAddress() << '\n';
          assert (requester != directory_entry->getOwner());
          MYLOG("WB_REQ>%d for %lx", directory_entry->getOwner(), address  )
                   assert(cached_data_buf == NULL);
@@ -757,8 +769,6 @@ DramDirectoryCntlr::retrieveDataAndSendToL2Cache(ShmemMsg::msg_t reply_msg_type,
    {
       if (m_nuca_cache)
       {
-         // std::cout << "Track if_nuca, addr, " << std::hex << address << std::dec << " type, " << orig_shmem_msg->getBlockType() << '\n';
-
          SubsecondTime nuca_latency;
          HitWhere::where_t hit_where;
          Byte nuca_data_buf[getCacheBlockSize()];
